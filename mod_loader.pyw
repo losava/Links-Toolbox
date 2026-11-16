@@ -12,6 +12,7 @@ Run:  python\\pythonw.exe save-editor\\mod_loader.pyw      (or Mod Loader.bat)
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tkinter as tk
@@ -142,6 +143,36 @@ def mod_folders(src):
     return sorted(p for p in src.iterdir() if p.is_dir() and (p / 'romfs').is_dir()) if src.is_dir() else []
 
 
+def find_mod_folders(src, depth=4):
+    """The mod folders anywhere in a folder, up to depth folders down (a zip's own layout: Mod\\romfs, Mods\\A\\romfs...)."""
+    src = Path(src)
+    out = []
+    for dirpath, dirs, _files in os.walk(src):
+        here = Path(dirpath)
+        if 'romfs' in dirs:
+            out.append(here)
+            dirs[:] = []
+        elif len(here.relative_to(src).parts) >= depth:
+            dirs[:] = []
+    return sorted(out, key=lambda p: p.name.lower())
+
+
+def unpack_mod_zip(zip_path):
+    """(temporary folder, folder to add from) for a mod zip; the caller removes the temporary folder. A zip with romfs
+    at its top is one mod, named after the zip."""
+    import code_mods
+    tmp = code_mods.unpack_zip(zip_path)
+    if (tmp / 'romfs').is_dir():
+        inner = tmp / '_mod' / re.sub(r'[<>:"/\\|?*]', '', zip_path.stem).strip()
+        inner.parent.mkdir()
+        inner.mkdir()
+        for p in list(tmp.iterdir()):
+            if p.name != '_mod':
+                shutil.move(str(p), str(inner / p.name))
+        return tmp, inner.parent
+    return tmp, tmp
+
+
 BUNDLED_LIST = 'bundled.txt'    # (written by make_share_zip: the names of the download's own mods, one a line)
 
 
@@ -251,6 +282,10 @@ class App(ttk.Frame):
         ttk.Button(top, text='Open folder', command=lambda: nxsave.open_folder(MODS)).pack(side='right')
         ttk.Button(top, text='Refresh', command=self.reload).pack(side='right', padx=(0, 6))
         ttk.Button(top, text='Add mods...', command=self.add_mods).pack(side='right', padx=(0, 6))
+        ttk.Button(top, text='Code mods...', command=self.code_mods).pack(side='right', padx=(0, 6))
+        # (code mods changed since the last Build: a line saying so)
+        self.code_line = ttk.Label(self, text='', foreground=theme.ERROR, padding=(10, 0, 10, 4), cursor='hand2')
+        self.code_line.bind('<Button-1>', lambda _e: self.code_mods())
 
         mid = ttk.Frame(self, padding=(10, 0))
         mid.pack(fill='both', expand=True)
@@ -329,6 +364,40 @@ class App(ttk.Frame):
         self.where['text'] = f'Mods in {MODS}'
         self.fill_games()
         self.fill()
+        self.show_code_line()
+
+    # -- code mods (Longshot: built into the game; code_mods.py)
+    def show_code_line(self):
+        text = ''
+        try:
+            import code_mods
+            st = code_mods.status()
+            needs = [v for _r, v, n, _m in st['roots'] if n]
+            missing = [v for _r, v, _n, m in st['roots'] if m]
+            if missing:
+                text = (f'Code mods are missing in Longshot {", ".join(missing)} (a Longshot update): click here, '
+                        'then Put them back and Build.')
+            elif needs:
+                text = 'Code mods changed: press Build in the Longshot Launcher (click here for the Code mods window).'
+        except Exception:
+            pass
+        self.code_line['text'] = text
+        if text:
+            self.code_line.pack(fill='x', after=self.winfo_children()[0])
+        else:
+            self.code_line.pack_forget()
+
+    def code_mods(self):
+        import code_mods_ui
+        win = code_mods_ui.CodeMods(self, on_change=self.after_code_change)
+        win.grab_set()
+
+    def after_code_change(self):
+        """A code mod's game files go into the mods folder: the list shows them (unless edits are not saved yet)."""
+        if not self.dirty:
+            self.mods = scan()
+            self.fill()
+        self.show_code_line()
 
     def fill(self, keep=None):
         self.tree.delete(*self.tree.get_children())
@@ -433,14 +502,46 @@ class App(ttk.Frame):
             if answer is None:
                 return
             src = BUNDLED if answer else None
+        tmp = None
         if src is None:
-            path = filedialog.askdirectory(parent=self, mustexist=True,
-                                           title='A mod folder (with romfs inside), or a folder of mods')
-            if not path:
+            kind = messagebox.askyesnocancel(
+                'Add mods', 'Is the mod a .zip file?\n\nYes: pick the .zip (from HookyCreator, a download...).   '
+                'No: pick a folder.', parent=self)
+            if kind is None:
                 return
-            src = Path(path)
+            if kind:
+                path = filedialog.askopenfilename(parent=self, title='The mod (.zip)',
+                                                  filetypes=[('Zip files', '*.zip'), ('All files', '*.*')])
+                if not path:
+                    return
+                try:
+                    tmp, src = unpack_mod_zip(Path(path))
+                except Exception as err:
+                    messagebox.showerror('Add mods', f'{Path(path).name} could not be opened:\n{err}', parent=self)
+                    return
+                import code_mods
+                if code_mods.find_packages(tmp):          # (a code mod: it goes into Longshot's sources instead)
+                    shutil.rmtree(tmp, ignore_errors=True)
+                    if messagebox.askyesno('Add mods', f'{Path(path).name} is a code mod: it is built into the game by '
+                                           'Longshot, not copied into the mods folder.\n\nOpen the Code mods window '
+                                           'to add it there?', parent=self):
+                        self.code_mods()
+                    return
+            else:
+                path = filedialog.askdirectory(parent=self, mustexist=True,
+                                               title='A mod folder (with romfs inside), or a folder of mods')
+                if not path:
+                    return
+                src = Path(path)
+        try:
+            self._add_from(src, bundled, deep=tmp is not None)
+        finally:
+            if tmp:
+                shutil.rmtree(tmp, ignore_errors=True)
+
+    def _add_from(self, src, bundled, deep=False):
         folders = (bundled + [p for p in mod_folders(BUNDLED) if p.name.startswith('~')] if src == BUNDLED
-                   else mod_folders(src))
+                   else find_mod_folders(src) if deep else mod_folders(src))
         if not folders:
             messagebox.showinfo('Add mods', f'{src}\n\nhas no mods in it: a mod is a folder with a "romfs" folder '
                                 'inside.', parent=self)

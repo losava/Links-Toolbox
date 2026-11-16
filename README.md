@@ -55,7 +55,8 @@ They're made for **Ocarina of Time v131072** built with Triforce, and may not wo
 - Lists every mod in that `mods` folder. Tick a mod to turn it on or off.
 - Set the order: when two mods replace the same file, the lower one wins, and clashes are shown in red.
 - **Save and play** starts the game with your choice.
-- **Add mods...** copies mods in: the ones that come with the toolbox, or any folder you pick.
+- **Add mods...** copies mods in: the ones that come with the toolbox, a folder you pick, or a **.zip** (from HookyCreator or a download). The mods inside a zip are found wherever they are in it.
+- **Code mods...** (Longshot): mods that change how the game works, not just its files. See [Code mods](#code-mods-longshot) below.
 - Builds the shared size table Triforce needs for mods that make game files bigger (the `~Size Table` folder), every time you press Save.
 - Won't change mods while the game is running.
 
@@ -115,6 +116,21 @@ Five themes (Dark green, Dark grey, Dark blue, Midnight purple, Light), an accen
 ## Longshot
 
 [Longshot](https://git.magicbean.dev/MagicBeanDev/Longshot) is another PC port of the same game, by MagicBeanDev (a continuation of Hookshot). It loads mods by the same rules as Triforce: a `mods` folder in the game folder, a `romfs` folder in each mod, `_` or `-` at the start of a name turns a mod off, the mod whose name sorts last wins, and only one size table is used. That means the Mods tab, the included mods and the size table work with it too. Its saves have the same layout, so the save editor reads them as well.
+
+### Code mods (Longshot)
+
+Some mods change how the game works, for example **Hyrule Armory**, which adds Sword and Shield frames to the HUD. Longshot turns the game's code into a PC program when it builds the game, so its `mods` folder can only replace game files. A code mod has to go into Longshot's own sources, and then the game is built again.
+
+The Mods tab's **Code mods...** window does that:
+
+- **Add code mod...** takes the mod's `.zip` (or **Add from a folder...** for one you've unzipped). It puts the mod into every Longshot version the Longshot Launcher has (`%LOCALAPPDATA%\LongshotLauncher\toolchains`), and its own game files (pictures...) into your Longshot `mods` folder.
+- First it checks every place in Longshot's code the mod connects to. If a Longshot version moved one, nothing is changed and it tells you.
+- Then press **Open the Longshot Launcher** and **Build** there. That's a full build, about as long as the first one, and it needs about 60 GB free while it runs. Your game, saves and settings stay. Until you build, the Mods tab shows a red line as a reminder.
+- **Remove** takes a code mod out again (then Build once more).
+- **After a Longshot update** the new version's sources come without the mods. The toolbox remembers them, the Mods tab says they're missing, and **Put them back** puts them all in; then Build.
+- A mod's options (like `HOS_HHS_ARMORY=0`) are shown when you select it. They go in a text file named `longshot_env.txt` beside `longshot.exe`, with no Build needed.
+
+It works with mod packages made the Hyrule HUD Suite way (a `mod.json` with a `longshot` folder). It does exactly what those packages' own `Install.cmd` does, and uses the same list of installed mods (`%LOCALAPPDATA%\HyruleHUDSuite\installed`), so mods put in either way show up in both.
 
 ### Several builds (any app)
 
@@ -176,6 +192,8 @@ It writes `share\Link Toolbox.zip`. Upload that to a GitHub release.
 | `updater.py` | The Updates tab: checks GitHub's newest release, downloads it and puts it in place |
 | `install.py` | Installs for this Windows user (shortcuts, Settings → Apps entry), and uninstalls |
 | `install.ps1` | The one-line install: downloads the newest release and opens its installer |
+| `code_mods.py` | Code mods for Longshot: puts them into Longshot's sources (checked first), takes them out, puts them back after an update |
+| `code_mods_ui.py` | The Code mods window |
 | `builds.py` | Several builds of any app: copies the mods to a new build and switches to it; the shared mods folder (folder links) |
 | `make_share_zip.py` | Builds `Link Toolbox.zip` (and, with `--linux`, the Linux `.tar.gz`) |
 

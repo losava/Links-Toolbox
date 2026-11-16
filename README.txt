@@ -156,8 +156,17 @@ Inventory tab to try them.
      - Up / Down sets the order. When two mods replace the same file, the
        LOWER one in the list wins. Clashes are shown in red.
      - Save writes your choice. Save and play writes it and starts the game.
-     - Add mods... copies mods in: the ones that came with the toolbox, or
-       any folder you pick (a mod is a folder with a "romfs" folder inside).
+     - Add mods... copies mods in: the ones that came with the toolbox, a
+       folder you pick (a mod is a folder with a "romfs" folder inside), or
+       a .zip (from HookyCreator or a download).
+     - Code mods... (Longshot): mods that change how the game works, like
+       Hyrule Armory. They go into Longshot's own sources, then you press
+       Build in the Longshot Launcher (a full build, about as long as the
+       first one; about 60 GB free while it runs). The window adds them
+       (from their .zip), removes them, and puts them back after a Longshot
+       update. It checks every place the mod connects to first: if Longshot
+       moved one, nothing is changed. Until you build, the Mods tab shows a
+       red line as a reminder.
      - Triforce needs one shared "size table" for mods that make game files
        bigger. The toolbox builds it for you (the "~Size Table" folder) every
        time you press Save. Don't delete or edit it by hand.
@@ -290,6 +299,7 @@ Inventory tab to try them.
      icons.py            the icon and the shortcuts
      updater.py          the Updates tab
      install.py          installing and uninstalling
+     code_mods.py        code mods for Longshot (code_mods_ui.py: their window)
      builds.py           several builds: mods to new builds, shared folder
      icon.ico, icon.png  the icon in use
   mods\                the five mods above (install with Mods tab > Add mods...)

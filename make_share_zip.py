@@ -65,14 +65,17 @@ Needs Windows 10 or 11.
 
 
 BUNDLED_LIST = 'bundled.txt'    # in the download's mods folder: the names of its mods, one a line
-# The download always ships these the same way, whatever is on or off in my own mods folder right now:
-SHIP_ON = ('Biggoron One-Handed',)               # (the default way to hold the Biggoron Sword)
-SHIP_OFF = ('Young Link Two-Handed Swords',)     # (replaces the same file as Biggoron One-Handed: one or the other)
+# ONLY these mods ever go in the download, whatever else is in (or switched on in) the mods folder: a mod is added to
+# this list only when the owner says so. Shipped on, in this order:
+SHIP = ('Young Link Mirror Shield', 'Young Link Hylian Shield', 'Young Link All Items', 'Young Link Adult Motions',
+        'Biggoron One-Handed')
+SHIP_OFF = ('Young Link Two-Handed Swords',)     # shipped switched off (it replaces the same file as One-Handed)
+# (no size table: it is built from each player's own game and mods when they press Save)
 
 
 def share_mods():
-    """[(folder, name in the download)]: the mods that are on in the game's mods folder, the size table, the SHIP_ON
-    mods (on even when they are off here) and the SHIP_OFF mods (switched off: their name keeps a leading _)."""
+    """[(folder, name in the download)]: the SHIP mods (on, numbered in SHIP's order) and the SHIP_OFF mods (off: a
+    leading _), taken from the game's mods folder. Nothing else, even if it is on there."""
     sys.path.insert(0, str(HERE))
     import nxsave
     # (from the game the toolbox is set to: the main build, Longshot rc; with sharing on, the shared mods folder)
@@ -80,17 +83,18 @@ def share_mods():
     print('mods from:', mods)
     import re
     plain = lambda name: re.sub(r'^(?:[-_]+)?(?:\d+-)?', '', name)
-    out = []
+    found = {}
     for p in sorted(mods.iterdir()) if mods.is_dir() else []:
-        if not p.is_dir() or not (p / 'romfs').is_dir():
-            continue
-        name, off = plain(p.name), p.name.startswith(('_', '-'))
-        if name in SHIP_OFF:
-            out.append((p, f'_{name}'))
-        elif name in SHIP_ON:
-            out.append((p, p.name if not off else f'90-{name}'))
-        elif not off:
-            out.append((p, p.name))
+        if p.is_dir() and (p / 'romfs').is_dir():
+            found.setdefault(plain(p.name), p)
+    missing = [n for n in SHIP + SHIP_OFF if n not in found]
+    if missing:
+        sys.exit(f'Not in {mods}: {", ".join(missing)} (the download must have every mod on the SHIP list)')
+    left = sorted(n for n in found if n not in SHIP + SHIP_OFF)
+    if left:
+        print('left out (not on the SHIP list):', ', '.join(left))
+    out = [(found[n], f'{i:02d}-{n}') for i, n in enumerate(SHIP, 1)]
+    out += [(found[n], f'_{n}') for n in SHIP_OFF]
     return out
 
 

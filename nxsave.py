@@ -24,7 +24,7 @@ try:
 except ImportError:                      # pragma: no cover
     zstd = None
 
-VERSION = '1.3.1'        # Link's Tool Box version (the updater compares it with the newest GitHub release)
+VERSION = '1.3.2'        # Link's Tool Box version (the updater compares it with the newest GitHub release)
 APP_NAME = "Link's Tool Box"      # the app's name as shown everywhere (file and folder names stay "Link Toolbox":
                                   # the updaters already out there look for those)
 HERE = Path(__file__).resolve().parent

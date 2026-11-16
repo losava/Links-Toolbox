@@ -589,7 +589,8 @@ class App(ttk.Frame):
             messagebox.showwarning('Add mods', f'Close {", ".join(running())} first.', parent=self)
             return
         code, normal, bad, tmps = [], [], [], []
-        try:
+
+        def sort_out():                    # (in the background: big zips take a while to unpack; no Tk in here)
             for p in (Path(x) for x in paths):
                 try:
                     if p.is_file() and p.suffix.lower() == '.zip':
@@ -603,11 +604,15 @@ class App(ttk.Frame):
                     if code_mods.find_packages(src):
                         code.append((p, src))
                     elif find_mod_folders(src):
-                        normal += find_mod_folders(src)
+                        normal.extend(find_mod_folders(src))
                     else:
                         bad.append(f'{p.name}: no mod in it (a mod has a "romfs" folder, a code mod a mod.json)')
                 except Exception as err:
                     bad.append(f'{p.name}: {err}')
+        try:
+            import busy
+            names = ', '.join(Path(x).name for x in paths)
+            busy.run(self, f'Opening {names[:80]}{"..." if len(names) > 80 else ""}...', sort_out, title='Add mods')
             if bad:
                 messagebox.showinfo('Add mods', 'Not added:\n\n' + '\n'.join(bad), parent=self)
             for p, src in code:

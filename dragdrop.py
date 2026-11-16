@@ -34,6 +34,20 @@ def enable(window, on_drop):
     hwnd = int(window.wm_frame(), 16)          # (the real top window Tk draws in)
     if hwnd in _hooks:
         return True
+    dropped = []
+
+    def collect():
+        while dropped:
+            paths = dropped.pop(0)
+            try:
+                on_drop(paths)
+            except Exception:
+                import traceback
+                traceback.print_exc()
+        try:
+            window.after(150, collect)
+        except Exception:          # (the window is gone)
+            pass
 
     def handler(h, msg, wparam, lparam):
         if msg == WM_DROPFILES:
@@ -48,7 +62,9 @@ def enable(window, on_drop):
             finally:
                 shell32.DragFinish(wparam)
             if paths:
-                window.after(0, lambda: on_drop(paths))    # (out of the message handler first)
+                # (NO Tk call here: this runs inside Tk's own event loop, where calling Tk aborts Python. Tk picks the
+                #  paths up itself, from its timer below)
+                dropped.append(paths)
             return 0
         return user32.CallWindowProcW(_hooks[hwnd][1], h, msg, wparam, lparam)
 
@@ -56,6 +72,7 @@ def enable(window, on_drop):
     old = setter(hwnd, GWLP_WNDPROC, ctypes.cast(new, ctypes.c_void_p))
     _hooks[hwnd] = (new, old)
     shell32.DragAcceptFiles(hwnd, True)
+    window.after(150, collect)
     return True
 
 

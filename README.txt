@@ -159,6 +159,8 @@ Inventory tab to try them.
      - Add mods... copies mods in: the ones that came with the toolbox, a
        folder you pick (a mod is a folder with a "romfs" folder inside), or
        a .zip (from HookyCreator or a download).
+     - Or drag mods from Explorer onto the window (Windows): .zip files and
+       folders, code mods too. Each is sorted out and added the right way.
      - Code mods... (Longshot): mods that change how the game works, like
        Hyrule Armory. They go into Longshot's own sources, then you press
        Build in the Longshot Launcher (a full build, about as long as the
@@ -300,6 +302,7 @@ Inventory tab to try them.
      updater.py          the Updates tab
      install.py          installing and uninstalling
      code_mods.py        code mods for Longshot (code_mods_ui.py: their window)
+     dragdrop.py         mods dragged onto the window (Windows)
      builds.py           several builds: mods to new builds, shared folder
      icon.ico, icon.png  the icon in use
   mods\                the five mods above (install with Mods tab > Add mods...)

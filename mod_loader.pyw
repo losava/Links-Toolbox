@@ -311,6 +311,9 @@ class App(ttk.Frame):
         ttk.Button(side, text='Down', command=lambda: self.move(1)).pack(fill='x', pady=(4, 0))
         ttk.Label(side, text='Lower wins\nwhen two mods\nreplace a file', foreground=theme.MUTED,
                   justify='center').pack(pady=(10, 0))
+        if os.name == 'nt':
+            ttk.Label(side, text='Drag mods here:\n.zip files or\nfolders, code\nmods too', foreground=theme.MUTED,
+                      justify='center').pack(pady=(16, 0))
 
         self.note = ttk.Label(self, text='', foreground=theme.SOFT, wraplength=720, justify='left', padding=(10, 6, 10, 0))
         self.note.pack(fill='x')
@@ -546,6 +549,9 @@ class App(ttk.Frame):
             messagebox.showinfo('Add mods', f'{src}\n\nhas no mods in it: a mod is a folder with a "romfs" folder '
                                 'inside.', parent=self)
             return
+        self._add_folders(folders)
+
+    def _add_folders(self, folders):
         # (the questions first: the copying then runs in the background, with the Working... window)
         have = {plain(p.name).lower(): p for p in MODS.iterdir() if p.is_dir()} if MODS.is_dir() else {}
         replace = set()
@@ -572,6 +578,70 @@ class App(ttk.Frame):
             self.status['text'] += f'   -   added {len(added) + len(replaced)}: press Save to use them'
         else:
             self.status['text'] += '   -   nothing new to add'
+
+    # -- dropped on the window (dragdrop.py): each thing dropped is sorted out
+    def add_paths(self, paths):
+        """Files and folders dragged in: a code mod (a package with mod.json and a "longshot" folder, in a zip or a
+        folder) goes into Longshot's sources after asking; any other zip or folder with romfs mods in it is copied into
+        the mods folder like Add mods; anything else is said."""
+        import code_mods
+        if running():
+            messagebox.showwarning('Add mods', f'Close {", ".join(running())} first.', parent=self)
+            return
+        code, normal, bad, tmps = [], [], [], []
+        try:
+            for p in (Path(x) for x in paths):
+                try:
+                    if p.is_file() and p.suffix.lower() == '.zip':
+                        tmp, src = unpack_mod_zip(p)
+                        tmps.append(tmp)
+                    elif p.is_dir():
+                        src = p
+                    else:
+                        bad.append(f'{p.name}: not a .zip or a folder')
+                        continue
+                    if code_mods.find_packages(src):
+                        code.append((p, src))
+                    elif find_mod_folders(src):
+                        normal += find_mod_folders(src)
+                    else:
+                        bad.append(f'{p.name}: no mod in it (a mod has a "romfs" folder, a code mod a mod.json)')
+                except Exception as err:
+                    bad.append(f'{p.name}: {err}')
+            if bad:
+                messagebox.showinfo('Add mods', 'Not added:\n\n' + '\n'.join(bad), parent=self)
+            for p, src in code:
+                self.add_code_mod(p, src)
+            if normal:
+                if self.dirty and not messagebox.askyesno('Add mods', 'Forget the changes you have not saved?',
+                                                          parent=self):
+                    return
+                self._add_folders(normal)
+        finally:
+            for t in tmps:
+                shutil.rmtree(t, ignore_errors=True)
+
+    def add_code_mod(self, dropped, src):
+        """A code mod dropped in: into Longshot's sources (asked first), then Build."""
+        import busy
+        import code_mods
+        if not messagebox.askyesno('Code mods', f'{dropped.name} is a code mod: it changes how the game works, so it '
+                                   'goes into Longshot\'s own sources, and then you press Build in the Longshot '
+                                   'Launcher (a full build).\n\nPut it in?', parent=self):
+            return
+        try:
+            names = busy.run(self, 'Putting the code mod into Longshot\'s sources...',
+                             lambda: code_mods.install(src), title='Code mods')
+        except (code_mods.CodeModError, OSError) as err:
+            messagebox.showerror('Code mods', str(err), parent=self)
+            return
+        finally:
+            self.after_code_change()
+        if messagebox.askyesno('Code mods', f'Put in: {", ".join(names)}\n\nNow press Build in the Longshot Launcher. '
+                               'Open it now?', parent=self):
+            exe = code_mods.launcher_exe()
+            if exe:
+                subprocess.Popen([str(exe)], cwd=str(exe.parent))
 
     # -- saving and playing
     def save(self):
@@ -637,6 +707,11 @@ def main():
     app = App(root)
     app.pack(fill='both', expand=True)
     root.protocol('WM_DELETE_WINDOW', app.close)
+    try:
+        import dragdrop
+        dragdrop.enable(root, app.add_paths)
+    except Exception:
+        pass
     root.mainloop()
 
 

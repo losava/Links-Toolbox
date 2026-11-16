@@ -78,6 +78,12 @@ class Toolbox:
         self.saves = save_editor.App(self.book, on_title=lambda t: self.set_title('saves', t),
                                      on_play=lambda: self.mods.play())
         self.book.add(self.saves, text='Save editor')
+        # (mods dragged onto the window from Explorer: the Mods tab comes to the front and adds them)
+        try:
+            import dragdrop
+            dragdrop.enable(root, self.dropped)
+        except Exception:
+            pass
         self.folders = self.make_folders_tab()
         self.book.add(self.folders, text='Folders')
         self.look = self.make_look_tab()
@@ -314,6 +320,11 @@ class Toolbox:
         else:
             self.update_status['text'] = f"You have the newest version ({nxsave.VERSION})."
         self.update_btn['state'] = 'normal' if newer and not updater.can_update() else 'disabled'
+
+    def dropped(self, paths):
+        self.book.select(self.mods)
+        self.root.update_idletasks()
+        self.mods.add_paths(paths)
 
     def install_app(self):
         """Opens the install window of this portable copy (the same one Install Link Toolbox.bat opens)."""

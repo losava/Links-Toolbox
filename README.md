@@ -56,6 +56,7 @@ They're made for **Ocarina of Time v131072** built with Triforce, and may not wo
 - Set the order: when two mods replace the same file, the lower one wins, and clashes are shown in red.
 - **Save and play** starts the game with your choice.
 - **Add mods...** copies mods in: the ones that come with the toolbox, a folder you pick, or a **.zip** (from HookyCreator or a download). The mods inside a zip are found wherever they are in it.
+- **Drag and drop** (Windows): drag mods from Explorer onto the window, any tab. It sorts them out: a code mod goes into Longshot's sources (it asks first), a `.zip` or a folder with `romfs` mods is copied in like Add mods, and anything else is listed as not added.
 - **Code mods...** (Longshot): mods that change how the game works, not just its files. See [Code mods](#code-mods-longshot) below.
 - Builds the shared size table Triforce needs for mods that make game files bigger (the `~Size Table` folder), every time you press Save.
 - Won't change mods while the game is running.
@@ -194,6 +195,7 @@ It writes `share\Link Toolbox.zip`. Upload that to a GitHub release.
 | `install.ps1` | The one-line install: downloads the newest release and opens its installer |
 | `code_mods.py` | Code mods for Longshot: puts them into Longshot's sources (checked first), takes them out, puts them back after an update |
 | `code_mods_ui.py` | The Code mods window |
+| `dragdrop.py` | Mods dragged onto the window from Explorer (Windows) |
 | `builds.py` | Several builds of any app: copies the mods to a new build and switches to it; the shared mods folder (folder links) |
 | `make_share_zip.py` | Builds `Link Toolbox.zip` (and, with `--linux`, the Linux `.tar.gz`) |
 

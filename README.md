@@ -57,6 +57,7 @@ They're made for **Ocarina of Time v131072** built with Triforce, and may not wo
 - **Save and play** starts the game with your choice.
 - **Add mods...** copies mods in: the ones that come with the toolbox, a folder you pick, or a **.zip** (from HookyCreator or a download). The mods inside a zip are found wherever they are in it.
 - **Drag and drop** (Windows): drag mods from Explorer onto the window, any tab. It sorts them out: a code mod goes into Longshot's sources (it asks first), a `.zip` or a folder with `romfs` mods is copied in like Add mods, and anything else is listed as not added.
+- **Mods with an `exefs` part** (`.ips` / `.pchtxt` patches, or a `subsdk` plugin such as exlaunch mods) are Switch code, which Longshot, Triforce and NX2navi never run: they compiled the game's code ahead of time. The toolbox says so when you add one and offers to add only its `romfs` part (which may do little without its code) or to skip it. `.rar` and `.7z` work like `.zip`.
 - **Code mods...** (Longshot): mods that change how the game works, not just its files. See [Code mods](#code-mods-longshot) below.
 - Builds the shared size table Triforce needs for mods that make game files bigger (the `~Size Table` folder), every time you press Save.
 - Won't change mods while the game is running.

@@ -60,6 +60,31 @@ def plain(folder):
     return PREFIX.sub('', folder) or folder
 
 
+EXEFS_WHY = ('An exefs part is code for the Switch: .ips / .pchtxt patches, or a plugin (subsdk1-9, like exlaunch '
+             'mods). Longshot, Triforce and NX2navi turned the game\'s code into a PC program ahead of time, so they '
+             'never run it: only a mod\'s romfs part (its game files) loads.')
+
+
+def has_exefs(folder):
+    """A mod folder with an exefs folder that has files in it."""
+    d = Path(folder) / 'exefs'
+    return d.is_dir() and any(p.is_file() for p in d.rglob('*'))
+
+
+def code_only(src, depth=4):
+    """The folders in src (up to depth down) that are a mod with only an exefs part: nothing the PC ports can load."""
+    src = Path(src)
+    out = []
+    for dirpath, dirs, _files in os.walk(src):
+        here = Path(dirpath)
+        if 'exefs' in dirs and 'romfs' not in dirs and has_exefs(here):
+            out.append(here)
+            dirs[:] = []
+        elif len(here.relative_to(src).parts) >= depth:
+            dirs[:] = []
+    return out
+
+
 def running():
     """The game programs running now (Windows and Linux)."""
     name = nxsave.game_running()
@@ -78,6 +103,7 @@ class Mod:
                 for n in names:
                     self.files.add((Path(root) / n).relative_to(romfs).as_posix().lower())
         self.loads = romfs.is_dir()               # Triforce loads RomFS mods only
+        self.exefs = has_exefs(MODS / folder)     # (code for the Switch: the PC ports never run it)
 
     def target(self, place):
         return f'{place:02d}-{self.name}' if self.on and self.loads else f'_{self.name}'
@@ -157,12 +183,41 @@ def find_mod_folders(src, depth=4):
     return sorted(out, key=lambda p: p.name.lower())
 
 
+ARCHIVES = ('.zip', '.rar', '.7z', '.tar', '.gz', '.tgz')
+
+
+def unpack_archive(path):
+    """A .rar / .7z / .tar.gz unpacked into a new temporary folder (the caller removes it), with the tar.exe Windows 10
+    and 11 have (bsdtar: it reads RAR and 7-Zip too), or tar elsewhere. No file may land outside the folder."""
+    import tempfile
+    tar = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32' / 'tar.exe' if os.name == 'nt' else 'tar'
+    if os.name == 'nt' and not Path(tar).is_file():
+        raise OSError(f'{Path(path).name}: this Windows has no tar.exe to open it. Unpack it yourself, then add the '
+                      'folder.')
+    listing = subprocess.run([str(tar), '-tf', str(path)], capture_output=True, text=True, errors='replace',
+                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    if listing.returncode != 0:
+        raise OSError(f'{Path(path).name} could not be read: {listing.stderr.strip()[:200]}')
+    for name in listing.stdout.splitlines():
+        parts = Path(name.replace('\\', '/')).parts
+        if name.startswith(('/', '\\')) or (len(name) > 1 and name[1] == ':') or '..' in parts:
+            raise OSError(f'{Path(path).name} has a file that points outside its folder ({name}): not used.')
+    tmp = Path(tempfile.mkdtemp(prefix='link-toolbox-zip-'))
+    r = subprocess.run([str(tar), '-xf', str(path), '-C', str(tmp)], capture_output=True, text=True, errors='replace',
+                       creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    if r.returncode != 0:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise OSError(f'{Path(path).name} could not be unpacked: {r.stderr.strip()[:200]}')
+    return tmp
+
+
 def unpack_mod_zip(zip_path):
-    """(temporary folder, folder to add from) for a mod zip; the caller removes the temporary folder. A zip with romfs
-    at its top is one mod, named after the zip."""
+    """(temporary folder, folder to add from) for a mod archive (.zip, .rar, .7z...); the caller removes the temporary
+    folder. An archive with romfs (or exefs) at its top is one mod, named after the archive."""
     import code_mods
-    tmp = code_mods.unpack_zip(zip_path)
-    if (tmp / 'romfs').is_dir():
+    zip_path = Path(zip_path)
+    tmp = code_mods.unpack_zip(zip_path) if zip_path.suffix.lower() == '.zip' else unpack_archive(zip_path)
+    if (tmp / 'romfs').is_dir() or (tmp / 'exefs').is_dir():
         inner = tmp / '_mod' / re.sub(r'[<>:"/\\|?*]', '', zip_path.stem).strip()
         inner.parent.mkdir()
         inner.mkdir()
@@ -227,7 +282,12 @@ def tidy_bundled(folder=None):
     return gone
 
 
-def install(folders, replace):
+def install(folders, replace, romfs_only=()):
+    """(romfs_only: plain names whose exefs part is left behind)"""
+    return _install(folders, replace, {n.lower() for n in romfs_only})
+
+
+def _install(folders, replace, romfs_only):
     """Copies mod folders into the mods folder. replace(name) says whether to overwrite a mod already there (the same
     name without its NN- / _ prefix). Returns (added, replaced, skipped) names."""
     import shutil
@@ -252,7 +312,8 @@ def install(folders, replace):
         # (a mod added is on, after the others and in the order it came in: Save numbers it; one that came switched
         #  off, its name starting with _ or -, stays off)
         off = src.name.startswith(('_', '-'))
-        shutil.copytree(src, MODS / (f'_{name}' if off else f'9{i:02d}-{name}'))
+        leave = (lambda d, names: ['exefs'] if Path(d) == src else []) if name.lower() in romfs_only else None
+        shutil.copytree(src, MODS / (f'_{name}' if off else f'9{i:02d}-{name}'), ignore=leave)
     return added, replaced, skipped
 
 
@@ -408,7 +469,8 @@ class App(ttk.Frame):
         problems = 0
         for i, m in enumerate(self.mods):
             if not m.loads:
-                state, tag = 'not a RomFS mod: the game does not load it', 'off'
+                state, tag = ('Switch code only (exefs): the PC ports cannot run it' if m.exefs else
+                              'not a RomFS mod: the game does not load it'), 'off'
             elif not m.on:
                 state, tag = '', 'off'
             else:
@@ -417,6 +479,8 @@ class App(ttk.Frame):
                 state = '; '.join(lost + won)
                 tag = 'clash' if lost else ''
                 problems += bool(lost)
+            if m.loads and m.exefs:
+                state = 'its exefs part (Switch code) is skipped' + (f'; {state}' if state else '')
             self.tree.insert('', 'end', iid=str(i), tags=(tag,) if tag else (),
                              values=('☑' if m.on and m.loads else '☐', m.name, state))
         if keep is not None:
@@ -444,7 +508,11 @@ class App(ttk.Frame):
 
     def show_note(self):
         i = self.selected()
-        self.note['text'] = NOTES.get(self.mods[i].name, '') if i is not None and i < len(self.mods) else ''
+        if i is None or i >= len(self.mods):
+            self.note['text'] = ''
+            return
+        m = self.mods[i]
+        self.note['text'] = '\n'.join(t for t in (NOTES.get(m.name, ''), EXEFS_WHY if m.exefs else '') if t)
 
     def click(self, event):
         if self.tree.identify_region(event.x, event.y) == 'cell' and self.tree.identify_column(event.x) == '#1':
@@ -508,13 +576,15 @@ class App(ttk.Frame):
         tmp = None
         if src is None:
             kind = messagebox.askyesnocancel(
-                'Add mods', 'Is the mod a .zip file?\n\nYes: pick the .zip (from HookyCreator, a download...).   '
+                'Add mods', 'Is the mod a .zip file (or .rar / .7z)?\n\nYes: pick the file (from HookyCreator, a '
+                'download...).   '
                 'No: pick a folder.', parent=self)
             if kind is None:
                 return
             if kind:
                 path = filedialog.askopenfilename(parent=self, title='The mod (.zip)',
-                                                  filetypes=[('Zip files', '*.zip'), ('All files', '*.*')])
+                                                  filetypes=[('Mod files', '*.zip *.rar *.7z *.tar *.gz *.tgz'),
+                                                             ('All files', '*.*')])
                 if not path:
                     return
                 try:
@@ -546,13 +616,35 @@ class App(ttk.Frame):
         folders = (bundled + [p for p in mod_folders(BUNDLED) if p.name.startswith('~')] if src == BUNDLED
                    else find_mod_folders(src) if deep else mod_folders(src))
         if not folders:
-            messagebox.showinfo('Add mods', f'{src}\n\nhas no mods in it: a mod is a folder with a "romfs" folder '
-                                'inside.', parent=self)
+            if code_only(src):
+                messagebox.showinfo('Add mods', f'{src}\n\nis Switch code only (an exefs part, no romfs).\n\n{EXEFS_WHY}',
+                                    parent=self)
+            else:
+                messagebox.showinfo('Add mods', f'{src}\n\nhas no mods in it: a mod is a folder with a "romfs" folder '
+                                    'inside.', parent=self)
             return
         self._add_folders(folders)
 
     def _add_folders(self, folders):
         # (the questions first: the copying then runs in the background, with the Working... window)
+        # mods with an exefs part: only their romfs part can load on the PC ports
+        code = [s for s in folders if not s.name.startswith('~') and has_exefs(s)]
+        romfs_only = set()
+        if code:
+            answer = messagebox.askyesnocancel(
+                'Add mods', 'These mods have an exefs part:\n\n' + '\n'.join('  ' + plain(s.name) for s in code) +
+                f'\n\n{EXEFS_WHY}\n\nWithout their code, their romfs part may do nothing, or only part of what the '
+                'mod is for (new menu text with nothing behind it, for example).\n\nYes: add only their romfs part.'
+                '   No: skip these mods.', icon='warning', parent=self)
+            if answer is None:
+                return
+            if answer:
+                romfs_only = {plain(s.name) for s in code}
+            else:
+                folders = [s for s in folders if s not in code]
+                if not folders:
+                    self.status['text'] += '   -   nothing added'
+                    return
         have = {plain(p.name).lower(): p for p in MODS.iterdir() if p.is_dir()} if MODS.is_dir() else {}
         replace = set()
         for src in folders:
@@ -565,7 +657,8 @@ class App(ttk.Frame):
         try:
             import busy
             added, replaced, skipped = busy.run(self, f'Copying {len(folders)} mod{"s" if len(folders) != 1 else ""} '
-                                                f'into\n{MODS}...', lambda: install(folders, lambda n: n in replace))
+                                                f'into\n{MODS}...',
+                                                lambda: install(folders, lambda n: n in replace, romfs_only))
         except OSError as err:
             messagebox.showerror('Add mods', f'The mods could not be copied:\n{err}', parent=self)
             self.dirty = False
@@ -593,18 +686,21 @@ class App(ttk.Frame):
         def sort_out():                    # (in the background: big zips take a while to unpack; no Tk in here)
             for p in (Path(x) for x in paths):
                 try:
-                    if p.is_file() and p.suffix.lower() == '.zip':
+                    if p.is_file() and p.suffix.lower() in ARCHIVES:
                         tmp, src = unpack_mod_zip(p)
                         tmps.append(tmp)
                     elif p.is_dir():
                         src = p
                     else:
-                        bad.append(f'{p.name}: not a .zip or a folder')
+                        bad.append(f'{p.name}: not a mod archive (.zip, .rar, .7z) or a folder')
                         continue
                     if code_mods.find_packages(src):
                         code.append((p, src))
                     elif find_mod_folders(src):
                         normal.extend(find_mod_folders(src))
+                    elif code_only(src):
+                        bad.append(f'{p.name}: Switch code only (an exefs part, no romfs): Longshot, Triforce and '
+                                   'NX2navi cannot run it')
                     else:
                         bad.append(f'{p.name}: no mod in it (a mod has a "romfs" folder, a code mod a mod.json)')
                 except Exception as err:

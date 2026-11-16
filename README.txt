@@ -159,6 +159,10 @@ Inventory tab to try them.
      - Add mods... copies mods in: the ones that came with the toolbox, a
        folder you pick (a mod is a folder with a "romfs" folder inside), or
        a .zip (from HookyCreator or a download).
+     - A mod with an exefs part (Switch code: .ips/.pchtxt patches or a
+       subsdk plugin) can't run on the PC ports. The toolbox says so and
+       offers to add only its romfs part, or to skip it. .rar and .7z work
+       like .zip.
      - Or drag mods from Explorer onto the window (Windows): .zip files and
        folders, code mods too. Each is sorted out and added the right way.
      - Code mods... (Longshot): mods that change how the game works, like

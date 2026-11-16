@@ -60,7 +60,7 @@ They're made for **Ocarina of Time v131072** built with Triforce, and may not wo
 - **Mods with an `exefs` part** (`.ips` / `.pchtxt` patches, or a `subsdk` plugin such as exlaunch mods) are Switch code, which Longshot, Triforce and NX2navi never run: they compiled the game's code ahead of time. The toolbox says so when you add one and offers to add only its `romfs` part (which may do little without its code) or to skip it. `.rar` and `.7z` work like `.zip`.
 - **Code mods...** (Longshot): mods that change how the game works, not just its files. See [Code mods](#code-mods-longshot) below.
 - Builds the shared size table Triforce needs for mods that make game files bigger (the `~Size Table` folder), every time you press Save.
-- Won't change mods while the game is running.
+- Won't change mods while the game is running, unless you tick **Save while the game runs** (in the Mods and Save editor tabs; it asks once and is remembered). The game then uses changed mods from its next start, and may write over an edited save when it saves itself.
 
 ![The Mods tab](docs/mods.png)
 

@@ -86,8 +86,9 @@ def code_only(src, depth=4):
 
 
 def running():
-    """The game programs running now (Windows and Linux)."""
-    name = nxsave.game_running()
+    """The game programs running now that stop saving (Windows and Linux): none when the player ticked "Save while
+    the game runs"."""
+    name = nxsave.blocking_game()
     return [name] if name else []
 
 
@@ -386,6 +387,8 @@ class App(ttk.Frame):
         self.play_btn.pack(side='right')
         self.save_btn = ttk.Button(bottom, text='Save', command=self.save)
         self.save_btn.pack(side='right', padx=(0, 6))
+        ttk.Checkbutton(bottom, text='Save while the game runs', variable=nxsave.ignore_running_var(self),
+                        command=self.toggle_ignore_running).pack(side='right', padx=(0, 12))
         self.reload()
 
     # -- which game's mods
@@ -494,7 +497,9 @@ class App(ttk.Frame):
             text += '   -   not saved'
         busy = running()
         if busy:
-            text += f'   -   {", ".join(busy)} is running: close it before saving'
+            text += f'   -   {", ".join(busy)} is running: close it before saving (or tick Save while the game runs)'
+        elif nxsave.ignore_running() and nxsave.game_running():
+            text += f'   -   {nxsave.game_running()} is running: changed mods are used from its next start'
         self.status['text'] = text
         state = 'disabled' if busy else 'normal'
         self.save_btn['state'] = state
@@ -771,8 +776,22 @@ class App(ttk.Frame):
             messagebox.showerror('Mod loader', f'{GAME_EXE} is not there.', parent=self)
             return
         if self.save():
+            already = nxsave.game_running()
+            if already:          # ("Save while the game runs" is on: saved, but no second copy of the game)
+                messagebox.showinfo('Mod loader', f'Saved. {already} is running already, so it was not started again: '
+                                    'restart it to use the changed mods.', parent=self)
+                return
             subprocess.Popen([str(GAME_EXE)], cwd=str(GAME_EXE.parent))
             self.after_play()
+
+    def toggle_ignore_running(self):
+        """The "Save while the game runs" checkbox: asked once when ticked, then remembered."""
+        var = nxsave.ignore_running_var(self)
+        if var.get() and not messagebox.askyesno('Save while the game runs', nxsave.IGNORE_RUNNING_WARNING,
+                                                 icon='warning', parent=self):
+            var.set(False)
+        nxsave.set_ignore_running(var.get())
+        self.fill()
 
     def restyle(self):
         """New theme colours (the toolbox's Look tab) on what does not follow the ttk styles by itself."""

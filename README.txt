@@ -176,7 +176,9 @@ Inventory tab to try them.
      - Triforce needs one shared "size table" for mods that make game files
        bigger. The toolbox builds it for you (the "~Size Table" folder) every
        time you press Save. Don't delete or edit it by hand.
-   Close the game first: mods can't be switched while it is running.
+   Close the game first: mods can't be switched while it is running, unless you
+   tick "Save while the game runs" (Mods and Save editor tabs). The game then
+   uses changed mods from its next start, and may write over an edited save.
 
  SAVE EDITOR
    Pick the Game at the top (Triforce, NX2navi or Longshot: each keeps its

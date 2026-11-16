@@ -320,6 +320,8 @@ class App(ttk.Frame):
         self.save_btn = ttk.Button(bottom, text='Save', command=self.save, state='disabled')
         self.save_btn.pack(side='right', padx=(0, 6))
         ttk.Button(bottom, text='Save to...', command=self.save_to_dialog).pack(side='right', padx=(0, 6))
+        ttk.Checkbutton(bottom, text='Save while the game runs', variable=nxsave.ignore_running_var(self),
+                        command=self.toggle_ignore_running).pack(side='right', padx=(0, 12))
         self.revert_btn = ttk.Button(bottom, text='Undo all edits', command=self.revert, state='disabled')
         self.revert_btn.pack(side='right', padx=(0, 8))
         ttk.Button(bottom, text='Backups folder', command=self.open_backups).pack(side='right', padx=(0, 8))
@@ -1350,10 +1352,10 @@ class App(ttk.Frame):
         s = self.slot
         if not s or 'progress' not in s.files:
             return
-        busy = nxsave.game_running()
+        busy = nxsave.blocking_game()
         if busy:
             messagebox.showwarning('Save to', f'{busy} is running: close it first, so it does not write over the '
-                                   'saves.', parent=self)
+                                   'saves (or tick Save while the game runs).', parent=self)
             return
         here = s.files['progress'].path.parent.parent
         places = nxsave.all_save_locations()
@@ -1453,13 +1455,22 @@ class App(ttk.Frame):
 
     def save_and_play(self):
         """Saves the edits (asking, as Save does), then starts the game."""
-        busy = nxsave.game_running()
+        busy = nxsave.blocking_game()
         if busy:
             messagebox.showwarning('Save and play', f'{busy} is running already: close it first, so it does not '
-                                   'write over the save, then press Save and play again.', parent=self)
+                                   'write over the save, then press Save and play again (or tick Save while the '
+                                   'game runs).', parent=self)
             return
         if self.save():
             self.on_play()
+
+    def toggle_ignore_running(self):
+        """The "Save while the game runs" checkbox (the same one as the Mods tab's): asked once when ticked."""
+        var = nxsave.ignore_running_var(self)
+        if var.get() and not messagebox.askyesno('Save while the game runs', nxsave.IGNORE_RUNNING_WARNING,
+                                                 icon='warning', parent=self):
+            var.set(False)
+        nxsave.set_ignore_running(var.get())
 
     def start_game(self):
         """On its own (not in the toolbox): start the game (Triforce.exe or longshot.exe) and close this window."""

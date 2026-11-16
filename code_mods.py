@@ -279,7 +279,7 @@ def _put_romfs(package):
 def install(path, log=lambda _s: None):
     """Puts in the package(s) in a folder or zip: remembered, into every Longshot source folder, its game files into
     the mods folders. Returns the names put in. The game must be closed."""
-    if nxsave.game_running():
+    if nxsave.blocking_game():
         raise CodeModError('Close the game first.')
     path = Path(path)
     tmp = unpack_zip(path) if path.is_file() and path.suffix.lower() == '.zip' else None
@@ -327,7 +327,7 @@ def install(path, log=lambda _s: None):
 def uninstall(family, log=lambda _s: None):
     """Takes a package out of every Longshot source folder, its game files out of the mods folders, and forgets it.
     (The suite's shared core and its 6 lines stay: they do nothing without a mod.) Build again afterwards."""
-    if nxsave.game_running():
+    if nxsave.blocking_game():
         raise CodeModError('Close the game first.')
     mine = STORE / family
     m = read_package(mine)

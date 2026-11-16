@@ -304,6 +304,46 @@ def is_longshot(game=None):
     return app_of(game) == 'Longshot'
 
 
+def ignore_running():
+    """The player chose to save even while the game runs (the "Save while the game runs" checkbox)."""
+    return bool(load_settings().get('ignore_running'))
+
+
+def set_ignore_running(on):
+    s = load_settings()
+    if on:
+        s['ignore_running'] = True
+    else:
+        s.pop('ignore_running', None)
+    save_settings(s)
+
+
+def blocking_game():
+    """The running game that stops saving: '' when none runs, or when the player chose to save anyway."""
+    return '' if ignore_running() else game_running()
+
+
+_ignore_var = None
+
+
+def ignore_running_var(master):
+    """One checkbox value for every tab (ticking it in one tab ticks it in the others)."""
+    global _ignore_var
+    if _ignore_var is None:
+        import tkinter as tk
+        _ignore_var = tk.BooleanVar(master, value=ignore_running())
+    return _ignore_var
+
+
+IGNORE_RUNNING_WARNING = (
+    'Save even while the game is running?\n\n'
+    '  Saves: the game keeps its own copy of the save and writes it back when it saves, so your edits can be '
+    'written over. Load the slot again in the game (or restart it) right after saving.\n'
+    '  Mods: the game read the mods when it started. Changed mods are used from the next start; files swapped '
+    'while it runs can make it crash.\n\n'
+    'Backups are still made before every save. The toolbox remembers this choice: untick the box to go back.')
+
+
 def game_running():
     """The name of the game's program when it is running, else ''."""
     import subprocess

@@ -2,7 +2,7 @@
 
 # Link's Tool Box
 
-**Mod loader and save editor for *The Legend of Zelda: Ocarina of Time* on [Longshot](https://git.magicbean.dev/MagicBeanDev/Longshot)**, the PC port. It also works with [Triforce](https://git.triforceproject.com/triforce/source) (early support, since in development; see [Longshot](#longshot) below).
+**Mod loader and save editor for *The Legend of Zelda: Ocarina of Time* on [Longshot](https://git.magicbean.dev/MagicBeanDev/Longshot)** early support, since in development; see [Longshot](#longshot) below), the PC port. It also works with (Triforce (I do not recommenend Trifroce))
 
 One small Windows app to switch your mods on and off before you play, and to edit your saves (hearts, magic, rupees, items, ammo, bottles, keys and story progress) using the names the game itself uses.
 

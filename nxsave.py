@@ -24,7 +24,7 @@ try:
 except ImportError:                      # pragma: no cover
     zstd = None
 
-VERSION = '1.3.3'        # Link's Tool Box version (the updater compares it with the newest GitHub release)
+VERSION = '1.4.0'        # Link's Tool Box version (the updater compares it with the newest GitHub release)
 APP_NAME = "Link's Tool Box"      # the app's name as shown everywhere (file and folder names stay "Link Toolbox":
                                   # the updaters already out there look for those)
 HERE = Path(__file__).resolve().parent
@@ -793,6 +793,100 @@ def sarc_members(p):
         s = names + (attr & 0xffffff) * 4
         out[p[s:p.index(b'\0', s)].decode()] = p[data + lo:data + hi]
     return out
+
+
+SARC_HASH = 0x65          # the hash multiplier sead writes when a tool does not say otherwise (SFAT + 8)
+
+
+def sarc_hash(name, multiplier=SARC_HASH):
+    """SFAT name hash: hash = hash * multiplier + c for each byte, c a signed char, wrapped to 32 bits. The game
+    binary-searches the node table, so nodes are stored sorted by this."""
+    h = 0
+    for b in name.encode():
+        c = b - 256 if b >= 128 else b
+        h = (h * multiplier + c) & 0xFFFFFFFF
+    return h
+
+
+def sarc_multiplier(p):
+    """The hash multiplier stored in the archive (0x65 unless a tool wrote another)."""
+    if p[:4] != b'SARC':
+        raise ValueError('not an archive')
+    head, = struct.unpack_from('<H', p, 4)
+    mult, = struct.unpack_from('<I', p, head + 8)
+    return mult
+
+
+def sarc_alignment(p):
+    """Largest power of two from 4 to 0x2000 that divides every file's start, or 8 when the archive is empty. The
+    format does not store an alignment: this is the one the bytes actually use (absolute, from the start of the file)."""
+    if p[:4] != b'SARC':
+        raise ValueError('not an archive')
+    head, = struct.unpack_from('<H', p, 4)
+    data, = struct.unpack_from('<I', p, 12)
+    count, = struct.unpack_from('<H', p, head + 6)
+    if not count:
+        return 8
+    starts = []
+    for i in range(count):
+        _h, _attr, lo, _hi = struct.unpack_from('<IIII', p, head + 12 + i * 16)
+        starts.append(data + lo)
+    align, step = 4, 8
+    while step <= 0x2000 and all(s % step == 0 for s in starts):
+        align = step
+        step <<= 1
+    return align
+
+
+def write_sarc(members, alignment=8, multiplier=SARC_HASH):
+    """A little-endian SARC (Switch). members: {name: bytes}. 8-byte alignment matched the game's own packs; pass the
+    archive's own sarc_alignment when rewriting one so a stricter alignment is kept. File starts are aligned from the
+    start of the file, and the data section is too, so the offsets stored relative to it stay aligned."""
+    if alignment <= 0 or alignment & (alignment - 1):
+        raise ValueError('alignment must be a power of two')
+    if not 0 <= multiplier <= 0xFFFFFFFF:
+        raise ValueError('hash multiplier out of range')
+    if len(members) >= 0x4000:            # (the game's reader rejects counts of 0x4000 or more)
+        raise ValueError('too many files for a SARC')
+    files = []
+    for name, data in members.items():
+        if '\0' in name:
+            raise ValueError('a file name cannot contain a NUL')
+        files.append((sarc_hash(name, multiplier), name, bytes(data)))
+    files.sort(key=lambda t: (t[0], t[1]))
+    names, name_off = bytearray(), []
+    for _h, name, _data in files:
+        off = len(names) // 4
+        if off >= (1 << 24):
+            raise ValueError('name table is too long')
+        name_off.append(off)
+        raw = name.encode() + b'\0'
+        names += raw + b'\0' * ((-len(raw)) & 3)
+    # SARC 0x14 + SFAT 0x0C + 16 bytes a node + SFNT 8 + names, then pad the data section up to the alignment
+    prefix = 0x14 + 0x0C + 16 * len(files) + 8 + len(names)
+    data_off = (prefix + alignment - 1) & ~(alignment - 1)
+    blob, spans, mask = bytearray(), [], alignment - 1
+    for _h, _name, data in files:
+        pad = (data_off + len(blob)) & mask
+        if pad:
+            blob += b'\0' * (alignment - pad)
+        start = len(blob)
+        blob += data
+        spans.append((start, start + len(data)))
+    file_size = data_off + len(blob)
+    out = bytearray()
+    out += b'SARC'
+    out += struct.pack('<HHIIHH', 0x14, 0xFEFF, file_size, data_off, 0x0100, 0)
+    out += b'SFAT'
+    out += struct.pack('<HHI', 0x0C, len(files), multiplier & 0xFFFFFFFF)
+    for (h, _name, _data), (lo, hi), off in zip(files, spans, name_off):
+        out += struct.pack('<IIII', h, (1 << 24) | off, lo, hi)     # (1 in the top byte: the name is stored)
+    out += b'SFNT'
+    out += struct.pack('<HH', 8, 0)
+    out += names
+    out += b'\0' * (data_off - len(out))
+    out += blob
+    return bytes(out)
 
 
 def byml(p):

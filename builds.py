@@ -66,7 +66,7 @@ def carry(old_game, new_game):
     new_mods.mkdir(parents=True, exist_ok=True)
     copied = []
     for p in mod_folders(old_mods):
-        if p.name.startswith('~'):        # (the size table: built again for the new build)
+        if p.name.startswith('~'):        # (a loader folder, ~Size Table or ~Merged Packs: built again for the new build)
             continue
         if not (new_mods / p.name).exists():
             shutil.copytree(p, new_mods / p.name)
@@ -85,12 +85,11 @@ def switch_to(new_game, app):
 
 
 def rebuild_size_table(game):
-    """The ~Size Table for the mods that are on, from that build's game files."""
-    import size_table
+    """~Merged Packs and the ~Size Table for the mods that are on, from that build's game files."""
+    import pack_merge
     mods = nxsave.mods_dir_for(game)
     on = [p.name for p in mod_folders(mods) if not p.name.startswith(('_', '-', '~'))]
-    if on:
-        size_table.build(mods, on, log=lambda _s: None)
+    pack_merge.refresh(mods, on, game=game, log=lambda _s: None)
 
 
 def plain(name):

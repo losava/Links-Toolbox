@@ -17,6 +17,8 @@
 !nxsave.py
 !oot_catalog.py
 !size_table.py
+!pack_merge.py
+!test_pack_merge.py
 !theme.py
 !jpeg_win.py
 !icons.py

@@ -6,7 +6,9 @@ Triforce reads the folders in game/mods by name:
 This window keeps that in the names: a mod that is on is "NN-<name>" (NN its place, the bottom of the list is the
 highest number and wins), a mod that is off is "_<name>". Nothing happens to the folders until Save or Save and play.
 Each save also writes "~Size Table" (size_table.py), the resource size table the mods that are on need, which
-Triforce does not work out by itself; it sorts after every mod, so its table is the one served.
+Triforce does not work out by itself; it sorts after every mod, so its table is the one served. When two or more of
+those mods carry the same .pack.zs, Save writes "~Merged Packs" (pack_merge.py) as well: one archive with each mod's
+changes inside it. That folder sorts after the mods and before ~Size Table, and the size table counts its files.
 
 Run:  python\\pythonw.exe save-editor\\mod_loader.pyw      (or Mod Loader.bat)
 """
@@ -99,10 +101,14 @@ class Mod:
         self.on = not folder.startswith(('-', '_'))
         romfs = MODS / folder / 'romfs'
         self.files = set()
+        self.paths = {}                    # lowercase path -> the spelling on disk (packs are merged by real path)
         if romfs.is_dir():
             for root, _d, names in os.walk(romfs):
                 for n in names:
-                    self.files.add((Path(root) / n).relative_to(romfs).as_posix().lower())
+                    rel = (Path(root) / n).relative_to(romfs).as_posix()
+                    low = rel.lower()
+                    self.files.add(low)
+                    self.paths[low] = rel
         self.loads = romfs.is_dir()               # Triforce loads RomFS mods only
         self.exefs = has_exefs(MODS / folder)     # (code for the Switch: the PC ports never run it)
 
@@ -111,7 +117,7 @@ class Mod:
 
 
 def scan():
-    # (folders starting with ~ are the loader's own, the size table: not listed)
+    # (folders starting with ~ are the loader's own, ~Size Table and ~Merged Packs: not listed)
     mods = [Mod(p.name) for p in MODS.iterdir() if p.is_dir() and not p.name.endswith('.old')
             and not p.name.startswith('~')] if MODS.is_dir() else []
     # the order Triforce uses: by folder name; mods that are off go below, by name
@@ -119,15 +125,16 @@ def scan():
     return mods
 
 
-def clashes(mods):
+def clashes(mods, merged=()):
     """{mod name: [(other name, files both carry, whether this one wins)]} among the mods that are on, in list order:
-    the lower in the list wins."""
+    the lower in the list wins. merged: lowercase paths (a .pack.zs Save merges) that are not a whole file lost."""
+    merged = set(merged)
     on = [m for m in mods if m.on and m.loads]
     out = {m.name: [] for m in on}
     for i, a in enumerate(on):
         for j, b in enumerate(on):
             if a is not b:
-                n = len(a.files & b.files)
+                n = len((a.files & b.files) - merged)
                 if n:
                     out[a.name].append((b.name, n, i > j))
     return out
@@ -152,9 +159,9 @@ def apply(mods):
     for m, t, new in temp:
         t.rename(MODS / new)
         m.folder = new
-    # Triforce does not raise the size table for mod files that grew: one table for the mods that are on
-    import size_table
-    size_table.build(MODS, [m.folder for m in on], log=lambda _s: None)
+    # packs two mods share are merged, then one size table for the mods that are on (it counts the merged packs)
+    import pack_merge
+    pack_merge.refresh(MODS, [m.folder for m in on], log=lambda _s: None)
     return [(m.name, new) for m, _t, new in temp]
 
 
@@ -297,7 +304,7 @@ def _install(folders, replace, romfs_only):
     added, replaced, skipped = [], [], []
     for i, src in enumerate(folders):
         name = plain(src.name)
-        if src.name.startswith('~'):              # the size table: Save builds it again from this game's own table
+        if src.name.startswith('~'):              # a loader folder (~Size Table, ~Merged Packs): Save builds it again
             if not (MODS / src.name).exists():
                 shutil.copytree(src, MODS / src.name)
             continue
@@ -328,6 +335,7 @@ class App(ttk.Frame):
         self.on_title = on_title or (lambda text: self.winfo_toplevel().title(text))
         self.after_play = after_play or (lambda: self.winfo_toplevel().destroy())
         self.mods = []
+        self.pack_notes = {}
         self.dirty = False
 
         top = ttk.Frame(self, padding=(10, 10, 10, 4))
@@ -468,7 +476,13 @@ class App(ttk.Frame):
 
     def fill(self, keep=None):
         self.tree.delete(*self.tree.get_children())
-        cl = clashes(self.mods)
+        try:                          # (member clashes inside a .pack.zs; a failure keeps the whole-file clash)
+            import pack_merge
+            pack, merged = pack_merge.ui_clashes(MODS, self.mods)
+        except Exception:
+            pack, merged = {}, set()
+        self.pack_notes = {name: note for name, (_lost, _won, note) in pack.items() if note}
+        cl = clashes(self.mods, merged)
         problems = 0
         for i, m in enumerate(self.mods):
             if not m.loads:
@@ -477,8 +491,11 @@ class App(ttk.Frame):
             elif not m.on:
                 state, tag = '', 'off'
             else:
+                plost, pwon = pack.get(m.name, ((), ()))[:2]
                 lost = [f'{o} wins {n} file{"s" if n > 1 else ""}' for o, n, wins in cl.get(m.name, []) if not wins]
                 won = [f'over {o} ({n})' for o, n, wins in cl.get(m.name, []) if wins]
+                lost += list(plost)
+                won += list(pwon)
                 state = '; '.join(lost + won)
                 tag = 'clash' if lost else ''
                 problems += bool(lost)
@@ -492,7 +509,7 @@ class App(ttk.Frame):
         on = sum(m.on and m.loads for m in self.mods)
         text = f'{on} of {len(self.mods)} mods on'
         if problems:
-            text += f'   -   {problems} lose files to another mod (red)'
+            text += f'   -   {problems} lose files or pack members to another mod (red)'
         if self.dirty:
             text += '   -   not saved'
         busy = running()
@@ -517,7 +534,8 @@ class App(ttk.Frame):
             self.note['text'] = ''
             return
         m = self.mods[i]
-        self.note['text'] = '\n'.join(t for t in (NOTES.get(m.name, ''), EXEFS_WHY if m.exefs else '') if t)
+        self.note['text'] = '\n'.join(t for t in (NOTES.get(m.name, ''), self.pack_notes.get(m.name, ''),
+                                                  EXEFS_WHY if m.exefs else '') if t)
 
     def click(self, event):
         if self.tree.identify_region(event.x, event.y) == 'cell' and self.tree.identify_column(event.x) == '#1':
@@ -758,7 +776,7 @@ class App(ttk.Frame):
         try:
             import busy
             mods = list(self.mods)
-            done = busy.run(self, 'Saving the mods and building the size table from the game files...',
+            done = busy.run(self, 'Saving the mods, merging packs and building the size table from the game files...',
                             lambda: apply(mods))
         except (OSError, ValueError) as err:
             messagebox.showerror('Mod loader', f'The folders could not be renamed:\n{err}', parent=self)

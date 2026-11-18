@@ -6,7 +6,8 @@ loads it. NX2navi raised the entries for mod files by itself; Triforce does not:
 the one a mod carries, as it is.
 
 So this writes one table, as a mod of its own that sorts after every other ("~Size Table", made by the mod loader on
-each save), from the game's table and, for every mod that is on:
+each save), from the game's table and, for every mod that is on ("~Merged Packs" sorts first, and is included, so a
+merged pack that grew is in the table too):
     the entries of the table it carries, if it carries one (the larger value of each)
     for each of its files the game has: the game's entry raised by twice the growth and a margin, when it grew
     for each of its files the game does not have and no table names: twice its size and a margin
@@ -19,6 +20,7 @@ import shutil
 import struct
 import sys
 import zlib
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import nxsave  # noqa: E402
@@ -58,12 +60,14 @@ def size_of(data, path, dics):
     return len(zstd.decompress(data, zstd_dict=d))
 
 
-def build(mods_dir, mod_folders, log=print, out=None):
+def build(mods_dir, mod_folders, log=print, out=None, game=None, rom=None):
     """Writes (or takes away) the size table mod for the given mod folders, in their order. Returns the entries
-    changed against the game's table. out: where the mod goes (default: mods_dir / FOLDER)."""
-    game = nxsave.game_dir()
+    changed against the game's table. out: where the mod goes (default: mods_dir / FOLDER). game: the game folder
+    (default: the one the toolbox is using). rom: that game's Romfs, when the caller already has it open."""
     out = out or mods_dir / FOLDER
-    rom = nxsave.Romfs(game)
+    own = rom is None
+    if own:
+        rom = nxsave.Romfs(Path(game) if game else nxsave.game_dir())
     try:
         dics = {k: zstd.ZstdDict(v) for k, v in
                 nxsave.sarc_members(zstd.decompress(rom.load('Pack/ZsDic.pack.zs'))).items()}
@@ -117,15 +121,17 @@ def build(mods_dir, mod_folders, log=print, out=None):
             log('size table: no mod that is on needs one; the game\'s own is served')
         return changed
     finally:
-        rom.close()
+        if own:
+            rom.close()
 
 
 def main(argv):
+    import pack_merge
     mods = nxsave.game_dir() / 'mods'
     on = sorted(p.name for p in mods.iterdir() if p.is_dir() and not p.name.startswith(('-', '_', '~'))
-                and (p / 'romfs').is_dir())
+                and (p / 'romfs').is_dir()) if mods.is_dir() else []
     print('mods that are on:', on)
-    build(mods, on)
+    pack_merge.refresh(mods, on)          # (merged packs first, so the table counts them; ~ folders are not in on)
     return 0
 
 

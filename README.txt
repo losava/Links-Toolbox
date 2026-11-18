@@ -133,7 +133,8 @@ and Two-Handed on in the Mods tab, then press Save.
 
 To install them:
   1. Open the toolbox, go to the Mods tab, click "Add mods..." and answer Yes.
-  2. Press Save. (That also builds the "~Size Table" for YOUR game.)
+  2. Press Save. (That also builds the "~Size Table" for YOUR game, and
+     merges a .pack.zs that more than one mod changes into "~Merged Packs".)
   3. Start the game (or press Save and play).
 
 They need the same game version they were made for: The Legend of Zelda:
@@ -176,6 +177,12 @@ Inventory tab to try them.
      - Triforce needs one shared "size table" for mods that make game files
        bigger. The toolbox builds it for you (the "~Size Table" folder) every
        time you press Save. Don't delete or edit it by hand.
+     - When two mods that are on change the same .pack.zs (one archive of
+       many small files), Save merges them into "~Merged Packs": your own
+       mod folders are not edited. The lower mod wins where both changed the
+       same file inside the pack, and that is shown in red. The folder loads
+       after your mods and before "~Size Table", and it is removed when
+       nothing needs merging.
    Close the game first: mods can't be switched while it is running, unless you
    tick "Save while the game runs" (Mods and Save editor tabs). The game then
    uses changed mods from its next start, and may write over an edited save.
@@ -302,6 +309,7 @@ Inventory tab to try them.
      nxsave.py           reads and writes the save files
      oot_catalog.py      the item list and where each value is kept
      size_table.py       builds the size table for mods
+     pack_merge.py       merges .pack.zs archives two mods both change
      theme.py            the colours
      jpeg_win.py         shows the slot picture (uses Windows' own decoder)
      icons.py            the icon and the shortcuts

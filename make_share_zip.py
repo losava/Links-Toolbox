@@ -22,7 +22,7 @@ HERE = Path(__file__).resolve().parent
 PYTHON = HERE.parent / 'python'
 OUT = HERE / 'share' / 'Link Toolbox.zip'
 APP = ('toolbox.pyw', 'mod_loader.pyw', 'save_editor.pyw', 'nxsave.py', 'oot_catalog.py', 'jpeg_win.py',
-       'size_table.py', 'theme.py', 'icons.py', 'updater.py', 'install.py', 'builds.py', 'busy.py',
+       'size_table.py', 'pack_merge.py', 'theme.py', 'icons.py', 'updater.py', 'install.py', 'builds.py', 'busy.py',
        'code_mods.py', 'code_mods_ui.py', 'dragdrop.py')
 INSTALL_BAT = '''@echo off
 rem Installs Link's Tool Box for this user (Start menu, Desktop, Windows Settings > Apps), or upgrades the installed one.

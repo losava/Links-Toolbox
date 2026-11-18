@@ -46,7 +46,7 @@ The zip comes with six mods in its `mods` folder. Install them from the **Mods**
 
 **Biggoron One-Handed** and **Young Link Two-Handed Swords** change the same file, so only one can be on. One-Handed comes switched on. To swing it with two hands, switch One-Handed off and Two-Handed on in the Mods tab, then press **Save**.
 
-They're made for **Ocarina of Time v131072** built with Triforce, and may not work on another version. Pressing Save also builds the size table (`~Size Table`) from your own game.
+They're made for **Ocarina of Time v131072** built with Triforce, and may not work on another version. Pressing Save also builds the size table (`~Size Table`) from your own game, and merges `.pack.zs` files that more than one mod changes (`~Merged Packs`).
 
 ## Features
 
@@ -60,6 +60,7 @@ They're made for **Ocarina of Time v131072** built with Triforce, and may not wo
 - **Mods with an `exefs` part** (`.ips` / `.pchtxt` patches, or a `subsdk` plugin such as exlaunch mods) are Switch code, which Longshot, Triforce and NX2navi never run: they compiled the game's code ahead of time. The toolbox says so when you add one and offers to add only its `romfs` part (which may do little without its code) or to skip it. `.rar` and `.7z` work like `.zip`.
 - **Code mods...** (Longshot): mods that change how the game works, not just its files. See [Code mods](#code-mods-longshot) below.
 - Builds the shared size table Triforce needs for mods that make game files bigger (the `~Size Table` folder), every time you press Save.
+- **Merged packs.** A `.pack.zs` is one archive of many small files. When two mods that are on both carry one, Save merges them into `~Merged Packs` (the game's original, plus each mod's new and changed files inside it, removals kept) instead of letting the lower mod replace the whole archive. The lower mod still wins a file both changed, and that is shown in red with the other clashes. A pack only one mod carries is left as it is. The folder loads after your mods and before `~Size Table`, the size table counts it, and it is removed when nothing needs merging. Your own mod folders are never edited. Works for Triforce and Longshot.
 - Won't change mods while the game is running, unless you tick **Save while the game runs** (in the Mods and Save editor tabs; it asks once and is remembered). The game then uses changed mods from its next start, and may write over an edited save when it saves itself.
 
 ![The Mods tab](docs/mods.png)
@@ -117,7 +118,7 @@ Five themes (Dark green, Dark grey, Dark blue, Midnight purple, Light), an accen
 
 ## Longshot
 
-[Longshot](https://git.magicbean.dev/MagicBeanDev/Longshot) is another PC port of the same game, by MagicBeanDev (a continuation of Hookshot). It loads mods by the same rules as Triforce: a `mods` folder in the game folder, a `romfs` folder in each mod, `_` or `-` at the start of a name turns a mod off, the mod whose name sorts last wins, and only one size table is used. That means the Mods tab, the included mods and the size table work with it too. Its saves have the same layout, so the save editor reads them as well.
+[Longshot](https://git.magicbean.dev/MagicBeanDev/Longshot) is another PC port of the same game, by MagicBeanDev (a continuation of Hookshot). It loads mods by the same rules as Triforce: a `mods` folder in the game folder, a `romfs` folder in each mod, `_` or `-` at the start of a name turns a mod off, the mod whose name sorts last wins, and only one size table is used. That means the Mods tab, the included mods, merged packs and the size table work with it too. Its saves have the same layout, so the save editor reads them as well.
 
 ### Code mods (Longshot)
 
@@ -138,7 +139,7 @@ It works with mod packages made the Hyrule HUD Suite way (a `mod.json` with a `l
 
 Some apps put every build in a folder of its own (Longshot's launcher always does), so a new build starts with an empty `mods` folder. This works for **every app**: Triforce, Longshot, NX2navi or another one that reads a `mods` folder.
 
-- **New builds:** when the toolbox starts and finds a newer build of the app you use, it asks once to **copy your mods across** (on/off and order kept) and **switch to the new build**. It uses the build's version file (`triforce_version.txt`, `longshot_version.txt`), or else the program's date. The old build is left as it was, and the size table is rebuilt for the new one. Tick **Bring my mods to new builds without asking** (Folders tab) to have it done automatically. The save editor's names are reused, so a new build opens straight away.
+- **New builds:** when the toolbox starts and finds a newer build of the app you use, it asks once to **copy your mods across** (on/off and order kept) and **switch to the new build**. It uses the build's version file (`triforce_version.txt`, `longshot_version.txt`), or else the program's date. The old build is left as it was, and the merged packs and the size table are rebuilt for the new one. Tick **Bring my mods to new builds without asking** (Folders tab) to have it done automatically. The save editor's names are reused, so a new build opens straight away.
 - **One shared mods folder (optional):** Folders tab → **Use one shared mods folder...** makes one folder (e.g. `Games\Link Toolbox mods`) that **every build of every app** uses. Each build's `mods` folder becomes a link to it (a Windows junction, no admin needed), so the app reads it as its own. New builds are linked as soon as the toolbox finds them, so there's nothing to copy, ever. The mods already in those folders are moved into it, and any with clashing names are kept in `mods (before sharing)`. **Stop sharing** removes the links (never the shared folder itself) and can copy the mods back into every build.
 - **Shared saves (optional):** Folders tab → **Use one shared saves folder...** gives **Triforce and Longshot one "user" folder** (the saves with their `save-tx`, `save-backup` and `temp`), e.g. `Games\Link Toolbox saves`. Triforce's `game\user` and Longshot's `%APPDATA%\Longshot` (and each Longshot build's `user`) become links to it. Longshot builds already share their saves through the launcher, so this is about Triforce and Longshot playing the same saves.
   - **You pick whose saves to start from.** The others are **never mixed in or deleted**: they're kept as they are, renamed `… (before sharing)`. Every save is also copied into the toolbox's `backups` first.
@@ -185,9 +186,10 @@ It writes `share\Link Toolbox.zip`. Upload that to a GitHub release.
 | `toolbox.pyw` | The main window: Mods, Save editor, Folders and Look tabs |
 | `mod_loader.pyw` | The Mods tab |
 | `save_editor.pyw` | The Save editor tab |
-| `nxsave.py` | Reads and writes the save files, finds the game and saves, and reads entry names from the game files |
+| `nxsave.py` | Reads and writes the save files, finds the game and saves, reads entry names from the game files, and reads and writes SARC packs |
 | `oot_catalog.py` | The item list, and where hearts, magic, rupees, bags, bottles and keys are kept in a save |
 | `size_table.py` | Builds the size table for mods |
+| `pack_merge.py` | Merges `.pack.zs` archives that more than one mod changes |
 | `theme.py` | Themes and tab colours |
 | `jpeg_win.py` | Turns the slot picture into PNG with Windows' own decoder |
 | `icons.py` | Draws the icons, makes `icon.ico` from them or from a slot picture, and makes the shortcuts |

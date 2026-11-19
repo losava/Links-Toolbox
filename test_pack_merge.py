@@ -421,12 +421,127 @@ def test_list_hides_loader_folders():
     print('ok list')
 
 
+def byml_doc(obj):
+    """A small BYML 7 writer for the tests (dicts, lists, texts, bools), laid out root first, children after."""
+    keys, texts = set(), set()
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                keys.add(k)
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+        elif isinstance(o, str):
+            texts.add(o)
+    walk(obj)
+    keys, texts = sorted(keys), sorted(texts)
+    kt, tt = pack_merge._text_table(keys), pack_merge._text_table(texts)
+    out = bytearray(b'YB' + struct.pack('<HIII', 7, 16, 16 + len(kt), 16 + len(kt) + len(tt)) + kt + tt)
+
+    def value(v):
+        if isinstance(v, dict):
+            return 0xc1, put(v)
+        if isinstance(v, list):
+            return 0xc0, put(v)
+        if isinstance(v, bool):
+            return 0xd0, int(v)
+        return 0xa0, texts.index(v)
+
+    def put(o):
+        at = len(out)
+        if isinstance(o, dict):
+            items = sorted(o.items(), key=lambda kv: keys.index(kv[0]))
+            out.extend(bytes([0xc1]) + len(items).to_bytes(3, 'little') + bytes(8 * len(items)))
+            for i, (k, v) in enumerate(items):
+                t, val = value(v)
+                p = at + 4 + 8 * i
+                out[p:p + 8] = keys.index(k).to_bytes(3, 'little') + bytes([t]) + struct.pack('<I', val)
+        else:
+            n = len(o)
+            vals_at = at + 4 + ((n + 3) & ~3)
+            out.extend(bytes([0xc0]) + n.to_bytes(3, 'little') + bytes(((n + 3) & ~3) + 4 * n))
+            for i, v in enumerate(o):
+                t, val = value(v)
+                out[at + 4 + i] = t
+                struct.pack_into('<I', out, vals_at + 4 * i, val)
+        return at
+    put(obj)
+    return bytes(out)
+
+
+def test_follow_animation_lists():
+    """A costume mod points the actor at its own animation list; another mod added sets to the actor's own list:
+    the added sets go into the list now used (first, retargeted like that list's own), merged or not."""
+    AP = 'Actor/P.engine__actor__ActorParam.bgyml'
+    OWN = 'Component/AnimationParam/P.engine__component__AnimationParam.bgyml'
+    COS = 'Component/AnimationParam/P_Cos.engine__component__AnimationParam.bgyml'
+    actor = lambda ref: byml_doc({'Components': {'AnimationRef': '?' + ref, 'ModelInfoRef': '?Component/M.bgyml'}})
+    sets = lambda *names: pack_merge.write_anim_list([{'ModelProjectName': n} for n in names])
+    cos = pack_merge.write_anim_list([{'IsRetarget': True, 'ModelProjectName': 'Cos_01', 'RetargetModel': 'Skeleton'},
+                                      {'ModelProjectName': 'Cos_Npc'}])
+    assert nxsave.byml(actor(OWN)) == {'Components': {'AnimationRef': '?' + OWN, 'ModelInfoRef': '?Component/M.bgyml'}}
+    assert [e['ModelProjectName'] for e in nxsave.byml(cos)['AnimationResources']] == ['Cos_01', 'Cos_Npc']
+    orig = {AP: actor(OWN), OWN: sets('G_01', 'G_02'), 'x': b'game x'}
+    adult = {AP: actor(OWN), OWN: sets('X_L1', 'X_L2', 'G_01', 'G_02'), 'x': b'game x'}   # (adult sets first)
+    costume = {AP: actor(COS), OWN: sets('G_01', 'G_02'), COS: cos, 'x': b'game x'}
+    # the function alone: first, retargeted like Cos_01; the list's own entries kept as they were
+    both = {AP: actor(COS), OWN: adult[OWN], COS: cos, 'x': b'game x'}
+    got, notes = pack_merge.follow_animation_lists(both, orig)
+    assert notes == [(AP, COS, ['X_L1', 'X_L2'])], notes
+    assert nxsave.byml(got[COS])['AnimationResources'] == [
+        {'IsRetarget': True, 'ModelProjectName': 'X_L1', 'RetargetModel': 'Skeleton'},
+        {'IsRetarget': True, 'ModelProjectName': 'X_L2', 'RetargetModel': 'Skeleton'},
+        {'IsRetarget': True, 'ModelProjectName': 'Cos_01', 'RetargetModel': 'Skeleton'},
+        {'ModelProjectName': 'Cos_Npc'}]
+    assert {k: v for k, v in got.items() if k != COS} == {k: v for k, v in both.items() if k != COS}
+    # sets a mod put after the game's own go after the list's own; nothing to do when the actor keeps its own list
+    after = dict(both, **{OWN: sets('G_01', 'G_02', 'X_L1')})
+    got, _n = pack_merge.follow_animation_lists(after, orig)
+    assert [e['ModelProjectName'] for e in nxsave.byml(got[COS])['AnimationResources']] == ['Cos_01', 'Cos_Npc', 'X_L1']
+    assert pack_merge.follow_animation_lists(adult, orig) == (adult, [])
+    assert pack_merge.follow_animation_lists(got, orig)[1] == []          # (done once: not added twice)
+    dic = train([b'alpha' * 30, b'beta' * 30, OWN.encode() * 20, b'Skeleton' * 20])
+    rel = 'Pack/Actor/P.pack.zs'
+    with tempfile.TemporaryDirectory() as tmp:
+        mods = Path(tmp)
+        # two mods, separate packs: merged (adult's list, costume's switch) and followed
+        _put(mods, '01-Costume', rel, zs_pack(costume, dic))
+        _put(mods, '02-Adult', rel, zs_pack(adult, dic))
+        done = pack_merge.build(mods, ['01-Costume', '02-Adult'], rom=_dict_rom(dic, {rel: orig}), log=lambda _s: None)
+        assert done['clashes'] == [] and done['written'] == [rel], done
+        assert [(f[2], f[3]) for f in done['followed']] == [(COS, ['X_L1', 'X_L2'])]
+        m = open_pack((mods / pack_merge.FOLDER / 'romfs' / rel).read_bytes(), dic)
+        assert m[AP] == costume[AP] and m[OWN] == adult[OWN]
+        assert [e['ModelProjectName'] for e in nxsave.byml(m[COS])['AnimationResources']] == [
+            'X_L1', 'X_L2', 'Cos_01', 'Cos_Npc']
+    with tempfile.TemporaryDirectory() as tmp:
+        mods = Path(tmp)
+        # one mod already carrying both changes (one combined pack): written although nothing else needs a merge
+        _put(mods, '01-Both', rel, zs_pack(both, dic))
+        done = pack_merge.build(mods, ['01-Both'], rom=_dict_rom(dic, {rel: orig}), log=lambda _s: None)
+        assert done['written'] == [rel] and done['clashes'] == []
+        # and a pack one mod carries that is not readable is left as it is, quietly
+        _put(mods, '02-Odd', 'Pack/Actor/Q.pack.zs', b'not a pack')
+        done = pack_merge.build(mods, ['01-Both', '02-Odd'], rom=_dict_rom(dic, {rel: orig}), log=lambda _s: None)
+        assert done['skipped'] == [] and done['written'] == [rel]
+        # an actor that keeps its own list: nothing written, no folder
+        shutil.rmtree(mods)
+        mods.mkdir()
+        _put(mods, '01-Adult', rel, zs_pack(adult, dic))
+        done = pack_merge.build(mods, ['01-Adult'], rom=_dict_rom(dic, {rel: orig}), log=lambda _s: None)
+        assert done['written'] == [] and not (mods / pack_merge.FOLDER).exists()
+    print('ok animation lists follow a switched model')
+
+
 def main():
     test_sarc_writer()
     test_merge_members()
     test_save_merges()
     test_skip_remove_order()
     test_list_hides_loader_folders()
+    test_follow_animation_lists()
     print('all pack merge tests passed')
 
 

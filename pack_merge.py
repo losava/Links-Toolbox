@@ -12,9 +12,18 @@ folder is removed when no pack needs merging.
 
 Run from the mod loader's Save (and when a new build's size table is rebuilt). The list shows a member both mods
 changed, in the same place as other clashes.
+
+Animation lists that follow a switched model (follow_animation_lists): a costume mod can point an actor's ActorParam
+at its own AnimationParam (Malon's costumes point young Link at Player_Malon_Child's list), so sets another mod added
+to the actor's own list (Adult Motions' rescaled adult sets) are never used. When the final pack does that, the added
+sets go into the list it points at too: first, in the order the mod gave them (the game takes a clip from the later
+set when two share a name, so the costume's own clips still win), and retargeted the way that list's own sets are
+(IsRetarget / RetargetModel copied from them). Such a pack is written to ~Merged Packs even when only one mod carries
+it. Nothing else in the list changes.
 """
 import os
 import shutil
+import struct
 from pathlib import Path
 
 import nxsave
@@ -84,6 +93,130 @@ def merge_members(original, mods):
     return result, clashes
 
 
+# ---------------------------------------------------------------------------------- animation lists that follow a model
+ANIM_LIST_KEY = 'AnimationResources'
+
+
+def _text_table(texts):
+    """A BYML text table (node 0xc2) of sorted texts."""
+    head = 4 + 4 * (len(texts) + 1)
+    body, offs = b'', []
+    for t in texts:
+        offs.append(head + len(body))
+        body += t.encode() + b'\0'
+    offs.append(head + len(body))
+    out = bytes([0xc2]) + len(texts).to_bytes(3, 'little') + struct.pack(f'<{len(offs)}I', *offs) + body
+    return out + bytes(-len(out) % 4)
+
+
+def write_anim_list(entries):
+    """An AnimationParam file laid out as the game's own (BYML 7): {AnimationResources: [ {key: text or bool}, ...]},
+    keys and texts in sorted tables, the root, the list, then one small dictionary a set. Only text and bool values."""
+    keys = sorted({ANIM_LIST_KEY} | {k for e in entries for k in e})
+    texts = sorted({v for e in entries for v in e.values() if isinstance(v, str)})
+    kt, tt = _text_table(keys), _text_table(texts)
+    root = 16 + len(kt) + len(tt)
+    array = root + 12
+    n = len(entries)
+    first = array + 4 + ((n + 3) & ~3) + 4 * n
+    out = b'YB' + struct.pack('<HIII', 7, 16, 16 + len(kt), root) + kt + tt
+    out += bytes([0xc1, 1, 0, 0]) + keys.index(ANIM_LIST_KEY).to_bytes(3, 'little') + bytes([0xc0])
+    out += struct.pack('<I', array)
+    out += bytes([0xc0]) + n.to_bytes(3, 'little') + bytes([0xc1] * n) + bytes(-n % 4)
+    offs, at = [], first
+    for e in entries:
+        offs.append(at)
+        at += 4 + 8 * len(e)
+    out += struct.pack(f'<{n}I', *offs)
+    for e in entries:
+        out += bytes([0xc1]) + len(e).to_bytes(3, 'little')
+        for k in sorted(e, key=keys.index):
+            v = e[k]
+            if isinstance(v, bool):
+                out += keys.index(k).to_bytes(3, 'little') + bytes([0xd0]) + struct.pack('<I', int(v))
+            elif isinstance(v, str):
+                out += keys.index(k).to_bytes(3, 'little') + bytes([0xa0]) + struct.pack('<I', texts.index(v))
+            else:
+                raise ValueError(f'{k}: a {type(v).__name__} value in an animation list is not written here')
+    return out
+
+
+def _anim_entries(data):
+    doc = nxsave.byml(data)
+    if not isinstance(doc, dict) or set(doc) != {ANIM_LIST_KEY} or not isinstance(doc[ANIM_LIST_KEY], list):
+        return None
+    if not all(isinstance(e, dict) and isinstance(e.get('ModelProjectName'), str) for e in doc[ANIM_LIST_KEY]):
+        return None
+    return doc[ANIM_LIST_KEY]
+
+
+def _ref(members, actor_param, key):
+    """An ActorParam's component reference ('?Component/...bgyml' -> member name), None when it has none."""
+    try:
+        doc = nxsave.byml(members[actor_param])
+        ref = doc['Components'][key]
+    except (KeyError, TypeError, ValueError):
+        return None
+    return ref.lstrip('?') if isinstance(ref, str) else None
+
+
+def follow_animation_lists(members, original):
+    """(members, notes): when an ActorParam in the final pack points its AnimationRef at another list than the game's
+    own, the sets mods added to the game's own list go into the list it points at too (see the module notes).
+    notes: [(actor param, list now used, [sets added])]. Does not mutate its inputs."""
+    result, notes = dict(members), []
+    for ap in sorted(m for m in members if m.endswith('.engine__actor__ActorParam.bgyml')):
+        if ap not in original:
+            continue
+        own, used = _ref(original, ap, 'AnimationRef'), _ref(members, ap, 'AnimationRef')
+        if not own or not used or own == used or own not in members or own not in original or used not in result:
+            continue
+        try:
+            game_sets = [e['ModelProjectName'] for e in (_anim_entries(original[own]) or [])]
+            modded = _anim_entries(members[own])
+            target = _anim_entries(result[used])
+        except (ValueError, struct.error):
+            continue
+        if modded is None or target is None or not game_sets:
+            continue
+        have = {e['ModelProjectName'] for e in target}
+        added = [e['ModelProjectName'] for e in modded
+                 if e['ModelProjectName'] not in game_sets and e['ModelProjectName'] not in have]
+        if not added:
+            continue
+        # retargeted the way the list's own sets are (a costume's model plays the player's animations through it)
+        style = next(({k: v for k, v in e.items() if k != 'ModelProjectName'} for e in target if e.get('IsRetarget')),
+                     {})
+        new = [dict(style, ModelProjectName=s) for s in added]
+        # where the mod put them: before the game's own sets (it wants those to win) or after them
+        names = [e['ModelProjectName'] for e in modded]
+        first_game = min((names.index(s) for s in game_sets if s in names), default=len(names))
+        before = all(names.index(s) < first_game for s in added)
+        entries = new + list(target) if before else list(target) + new
+        result[used] = write_anim_list(entries)
+        notes.append((ap, used, added))
+    return result, notes
+
+
+def _carried(mods_dir, folders):
+    """{lowercase path: [(folder, real relative path), ...]} for every .pack.zs any of the folders carries."""
+    found = {}
+    for folder in folders:
+        if str(folder).startswith('~'):
+            continue
+        root = Path(mods_dir) / folder / 'romfs'
+        if not root.is_dir():
+            continue
+        for dirpath, _d, names in os.walk(root):
+            for name in names:
+                rel = (Path(dirpath) / name).relative_to(root).as_posix()
+                if rel.lower().endswith('.pack.zs'):
+                    pairs = found.setdefault(rel.lower(), [])
+                    if all(f != str(folder) for f, _r in pairs):
+                        pairs.append((str(folder), rel))
+    return found
+
+
 def _shared(mods_dir, folders):
     """{lowercase path: [(folder, real relative path), ...]} for every .pack.zs that two or more of the folders
     carry, in the order the folders were given."""
@@ -140,7 +273,11 @@ def build(mods_dir, mod_folders, game=None, log=print, rom=None):
     mods_dir = Path(mods_dir)
     out = mods_dir / FOLDER
     shared = _shared(mods_dir, mod_folders)
-    written, clashes, skipped = [], [], []
+    # (an actor pack one mod carries can still need its animation lists followed: Pack/Actor/*.pack.zs)
+    for key, owners in _carried(mods_dir, mod_folders).items():
+        if key not in shared and key.startswith('pack/actor/'):
+            shared[key] = owners
+    written, clashes, skipped, followed = [], [], [], []
     close = False
     if shared:
         if rom is None:
@@ -160,18 +297,24 @@ def build(mods_dir, mod_folders, game=None, log=print, rom=None):
                         loaded.append((folder, members))
                         align = max(align, mod_align)
                     align = max(align, 8)         # (8 matched the game's packs; higher is kept when the bytes use it)
-                    merged, fights = merge_members(original, loaded)
+                    merged, fights = merge_members(original, loaded) if len(loaded) > 1 else (loaded[0][1], [])
                     rel = _canon(rom, key, owners)
                     for member, loser, winner in fights:
                         clashes.append((rel, member, loser, winner))
+                    merged, notes = follow_animation_lists(merged, original)
+                    for ap, used, added in notes:
+                        followed.append((rel, ap, used, added))
+                        log(f'merged packs: {rel}: {Path(used).name} now also lists {", ".join(added)} '
+                            f'(its ActorParam uses that list, not its own)')
                     # the later mod's archive already loads last: write only when the merge is not that archive
                     if merged != loaded[-1][1]:
                         raw = nxsave.write_sarc(merged, alignment=align, multiplier=mult)
                         blob = zstd.compress(raw, level=LEVEL, zstd_dict=dic)
                         written.append((rel, blob))
                 except (OSError, ValueError, zstd.ZstdError) as err:
-                    skipped.append((owners[-1][1], str(err)))
-                    log(f'merged packs: skipped {owners[-1][1]}: {err}')
+                    if len(owners) > 1:          # (one mod's own pack, only looked at for its animation lists: as it is)
+                        skipped.append((owners[-1][1], str(err)))
+                        log(f'merged packs: skipped {owners[-1][1]}: {err}')
         finally:
             if close:
                 rom.close()
@@ -186,7 +329,7 @@ def build(mods_dir, mod_folders, game=None, log=print, rom=None):
             f'{len(clashes)} member clash{"es" if len(clashes) != 1 else ""}')
     elif not skipped:
         log('merged packs: no pack carried by two mods that are on needs one')
-    return {'written': [rel for rel, _b in written], 'clashes': clashes, 'skipped': skipped}
+    return {'written': [rel for rel, _b in written], 'clashes': clashes, 'skipped': skipped, 'followed': followed}
 
 
 def refresh(mods_dir, mod_folders, game=None, log=lambda _s: None, rom=None):

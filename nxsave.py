@@ -19,10 +19,59 @@ import struct
 import time
 from pathlib import Path
 
+NEED_ZSTD = ('This needs Zstandard: Python 3.14 or newer, or on an older Python the "zstandard" module '
+             '(Ubuntu / Debian: sudo apt install python3-zstandard; Fedora: sudo dnf install '
+             'python3-zstandard; Arch: sudo pacman -S python-zstandard).')
+
+
+def _zstandard_shim(zs):
+    """The few compression.zstd calls the toolbox makes, done with the "zstandard" module (pip / distro package), for
+    a Python older than 3.14 (Linux: the system's)."""
+    import types
+
+    def ZstdDict(data):
+        return zs.ZstdCompressionDict(bytes(data))
+
+    def decompress(data, zstd_dict=None):
+        d = zs.ZstdDecompressor(dict_data=zstd_dict) if zstd_dict is not None else zs.ZstdDecompressor()
+        try:
+            return d.decompress(data)
+        except zs.ZstdError:      # (no size in the frame's header: read it as a stream)
+            d = zs.ZstdDecompressor(dict_data=zstd_dict) if zstd_dict is not None else zs.ZstdDecompressor()
+            return d.decompressobj().decompress(data)
+
+    def compress(data, level=3, zstd_dict=None):
+        c = zs.ZstdCompressor(level=level, dict_data=zstd_dict) if zstd_dict is not None else \
+            zs.ZstdCompressor(level=level)
+        return c.compress(data)
+
+    def get_frame_info(data):
+        n = zs.get_frame_parameters(data).content_size
+        return types.SimpleNamespace(decompressed_size=None if n in (-1, zs.CONTENTSIZE_UNKNOWN) else n)
+    return types.SimpleNamespace(ZstdDict=ZstdDict, ZstdError=zs.ZstdError, decompress=decompress, compress=compress,
+                                 get_frame_info=get_frame_info)
+
+
+class _NoZstd:
+    """Stands in for compression.zstd when there is none: the toolbox still opens, and what needs it says why."""
+    class ZstdError(Exception):
+        pass
+
+    def __getattr__(self, name):
+        raise RuntimeError(NEED_ZSTD)
+
+    def __bool__(self):
+        return False
+
+
 try:
     import compression.zstd as zstd     # Python 3.14+
-except ImportError:                      # pragma: no cover
-    zstd = None
+except ImportError:
+    try:
+        import zstandard as _zs         # (an older Python: Linux's own)
+        zstd = _zstandard_shim(_zs)
+    except ImportError:
+        zstd = _NoZstd()
 
 VERSION = '1.4.0'        # Link's Tool Box version (the updater compares it with the newest GitHub release)
 APP_NAME = "Link's Tool Box"      # the app's name as shown everywhere (file and folder names stay "Link Toolbox":
@@ -962,8 +1011,8 @@ def build_names(game=None, progress=lambda text: None):
     """{'names': {hash: name}, 'enums': {flag hash: [[value hash, name], ...]}, 'enum_values': {hash: name}}, read
     from the game's files: the game's list of save entries gives the hashes, and every run of name characters in the
     game's data files is hashed and looked up among them. Grouped entries are named 'Group.Member'."""
-    if zstd is None:
-        raise RuntimeError('this needs Python 3.14 or later (compression.zstd)')
+    if not zstd:
+        raise RuntimeError(NEED_ZSTD)
     rom = Romfs(game or game_dir())
     try:
         progress('Reading the game\'s list of save entries...')

@@ -100,24 +100,72 @@ def share_mods():
 
 LINUX_OUT = HERE / 'share' / 'Link Toolbox (Linux).tar.gz'
 SH = '''#!/bin/sh
-# Opens Link's Tool Box (mod loader and save editor) with this computer's Python: 3.14 or newer, with Tk.
+# Opens Link's Tool Box (mod loader and save editor) with this computer's Python: 3.10 or newer, with Tk. For the
+# game's packed files it also needs Zstandard: Python 3.14's own, or the zstandard module on an older Python.
+# What goes wrong is shown in a message box (or in the terminal) and kept in "Link Toolbox error.log" here.
 cd "$(dirname "$0")" || exit 1
-for py in python3.14 python3.15 python3.16 python3.17 python3 python; do
-  if command -v "$py" >/dev/null 2>&1 && \\
-     "$py" -c 'import sys, tkinter, compression.zstd; sys.exit(sys.version_info < (3, 14))' 2>/dev/null; then
-    exec "$py" app/toolbox.pyw "$@"
+LOG="Link Toolbox error.log"
+PYS="python3.17 python3.16 python3.15 python3.14 python3.13 python3.12 python3.11 python3.10 python3 python"
+TK='import sys, tkinter
+sys.exit(sys.version_info < (3, 10))'
+ZS='import sys, tkinter
+try:
+    import compression.zstd
+except ImportError:
+    import zstandard
+sys.exit(sys.version_info < (3, 10))'
+
+pick() {     # the first Python that runs the check $1
+  for p in $PYS; do
+    if command -v "$p" >/dev/null 2>&1 && "$p" -c "$1" >/dev/null 2>&1; then echo "$p"; return 0; fi
+  done
+  return 1
+}
+
+say() {      # a message where it can be seen: a dialog, the terminal, and the log
+  printf '%s\\n' "$1" >&2
+  printf '%s  Link Toolbox.sh\\n%s\\n\\n' "--- $(date '+%Y-%m-%d %H:%M:%S')" "$1" >>"$LOG" 2>/dev/null
+  if [ -t 0 ] && [ -t 1 ]; then
+    printf '\\nPress Enter to close.' >&2; read -r _
+  elif command -v zenity >/dev/null 2>&1; then zenity --error --title="Link's Tool Box" --text="$1"
+  elif command -v kdialog >/dev/null 2>&1; then kdialog --title "Link's Tool Box" --error "$1"
+  elif command -v xmessage >/dev/null 2>&1; then printf '%s\\n' "$1" | xmessage -center -file -
+  elif command -v notify-send >/dev/null 2>&1; then notify-send "Link's Tool Box" "$1"
+  fi
+}
+
+py=$(pick "$ZS") || py=$(pick "$TK")
+if [ -n "$py" ]; then
+  "$py" app/toolbox.pyw "$@"
+  status=$?
+  # (the toolbox shows and logs its own errors; in a terminal, keep it open to read them)
+  if [ "$status" -ne 0 ] && [ -t 0 ] && [ -t 1 ]; then
+    printf '\\nLink'"'"'s Tool Box stopped (exit code %s). The details are in "%s".\\nPress Enter to close.' \\
+      "$status" "$PWD/$LOG" >&2
+    read -r _
+  fi
+  exit "$status"
+fi
+
+found=''
+for p in $PYS; do
+  if command -v "$p" >/dev/null 2>&1; then
+    v=$("$p" -c 'import sys; print(sys.version.split()[0])' 2>/dev/null)
+    if "$p" -c 'import tkinter' >/dev/null 2>&1; then t='with Tk'; else t='no Tk'; fi
+    found="$found
+  $p ($(command -v "$p")): ${v:-?}, $t"
   fi
 done
-msg="Link's Tool Box needs Python 3.14 or newer, with Tk.
+say "Link's Tool Box needs Python 3.10 or newer, with Tk.
+
+Found on this computer:${found:-
+  no Python}
 
 Install them, then open Link Toolbox.sh again. For example:
-  Ubuntu / Debian:  sudo apt install python3 python3-tk
-  Fedora:           sudo dnf install python3 python3-tkinter
-  Arch / SteamOS:   sudo pacman -S python tk
-(Python 3.14 is needed: older systems may need a newer Python first.)"
-if command -v zenity >/dev/null 2>&1; then zenity --error --title="Link's Tool Box" --text="$msg"
-elif command -v kdialog >/dev/null 2>&1; then kdialog --title "Link's Tool Box" --error "$msg"
-else printf '%s\\n' "$msg" >&2; fi
+  Ubuntu / Debian / Mint:  sudo apt install python3 python3-tk python3-zstandard
+  Fedora:                  sudo dnf install python3 python3-tkinter python3-zstandard
+  Arch / Manjaro:          sudo pacman -S python tk python-zstandard
+(zstandard is needed on Pythons older than 3.14, to read the game's packed files.)"
 exit 1
 '''
 

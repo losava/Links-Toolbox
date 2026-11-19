@@ -65,9 +65,12 @@ LINUX (the "Link Toolbox (Linux).tar.gz" download):
   2. Open "Link Toolbox.sh" (double-click, or run ./"Link Toolbox.sh").
      Some file managers ask first, or need "Allow launching" / "Run as a
      program" turned on for it.
-  It uses this computer's Python, which must be 3.14 or newer with Tk
-  (python3-tk / python3-tkinter / tk). If it's missing, the script says
-  what to install. On Linux the toolbox works best with Longshot's Linux
+  It uses this computer's Python, which must be 3.10 or newer with Tk
+  (python3-tk / python3-tkinter / tk). On a Python older than 3.14 it also
+  needs zstandard (python3-zstandard / python-zstandard) to read the game's
+  packed files. If something is missing, the script says what to install.
+  If the toolbox cannot start, it says why and writes the details to
+  "Link Toolbox error.log" next to the script. On Linux the toolbox works best with Longshot's Linux
   build (saves in ~/.local/share/longshot/save). Triforce or NX2navi run
   through Wine/Proton can be picked in the Folders tab. The slot picture
   needs Pillow, ImageMagick or ffmpeg installed (without them it's left

@@ -8,14 +8,61 @@
 
 Run:  python\\pythonw.exe save-editor\\toolbox.pyw      (or Link Toolbox.bat). The two still open on their own too.
 """
-import importlib.util
 import os
 import sys
-import tkinter as tk
-from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# where a start-up failure is written: next to Link Toolbox.bat / .sh (the download's folder), else next to this file
+LOG = os.path.join(HERE if any(os.path.isfile(os.path.join(HERE, n)) for n in ('Link Toolbox.bat', 'Link Toolbox.sh'))
+                   else os.path.dirname(HERE), 'Link Toolbox error.log')
+
+
+def log_error(text):
+    """Adds a failure to Link Toolbox error.log (pythonw, or a double-clicked .sh, has no console to show it in) and
+    prints it when there is a console. The log's path, or '' when it could not be written."""
+    if sys.stderr:
+        try:
+            print(text, file=sys.stderr)
+        except Exception:
+            pass
+    import platform
+    import time
+    head = f'--- {time.strftime("%Y-%m-%d %H:%M:%S")}  Python {platform.python_version()} ({sys.executable}), ' \
+           f'{platform.platform()}\n'
+    for path in (LOG, os.path.join(os.path.expanduser('~'), 'Link Toolbox error.log')):
+        try:
+            with open(path, 'a', encoding='utf-8') as f:
+                f.write(head + text.rstrip() + '\n\n')
+            return path
+        except OSError:
+            pass
+    return ''
+
+
+def show_crash(kind, exc, tb):
+    """An error that stops the toolbox from starting: kept in the log and shown in a message box, so the window does
+    not just vanish."""
+    import traceback
+    path = log_error(''.join(traceback.format_exception(kind, exc, tb)))
+    try:
+        import tkinter
+        from tkinter import messagebox as mb
+        r = tkinter.Tk()
+        r.withdraw()
+        mb.showerror("Link's Tool Box", "Link's Tool Box could not start:\n\n"
+                     f'{kind.__name__}: {exc}\n\n' + (f'The details are in:\n{path}' if path else ''), parent=r)
+        r.destroy()
+    except Exception:
+        pass
+
+
+sys.excepthook = show_crash
+
+import importlib.util  # noqa: E402
+import tkinter as tk  # noqa: E402
+from pathlib import Path  # noqa: E402
+from tkinter import filedialog, messagebox, ttk  # noqa: E402
+
 sys.path.insert(0, HERE)
 import nxsave  # noqa: E402
 import theme  # noqa: E402
@@ -928,8 +975,15 @@ class Toolbox:
             self.root.destroy()
 
 
+def report_callback_error(kind, exc, tb):
+    """An error in a button or a timer: the window stays open; it is printed and kept in the log."""
+    import traceback
+    log_error(''.join(traceback.format_exception(kind, exc, tb)))
+
+
 def main():
     root = tk.Tk()
+    root.report_callback_exception = report_callback_error
     theme.apply(root)
     icons.apply(root)
     if '--selftest' not in sys.argv:
@@ -959,6 +1013,10 @@ def main():
         except Exception:
             pass
     box = Toolbox(root)
+    if not nxsave.zstd and '--selftest' not in sys.argv:    # (a Linux Python older than 3.14, without zstandard)
+        root.after(800, lambda: messagebox.showwarning(
+            BASE_TITLE, 'This Python cannot read the game\'s packed files, so Save in the Mods tab and the names in '
+            f'the save editor will not work yet.\n\n{nxsave.NEED_ZSTD}\n\nThen open the toolbox again.', parent=root))
     if '--selftest' not in sys.argv and nxsave.load_settings().get('check_updates', True) is True:
         root.after(1500, lambda: box.check_updates(quiet=True))    # (quiet: no message when offline)
     if '--selftest' in sys.argv:      # open both tabs, switch between them, close: nothing is written

@@ -213,6 +213,97 @@ def find_mod_folders(src, depth=4):
 
 ARCHIVES = ('.zip', '.rar', '.7z', '.tar', '.gz', '.tgz')
 
+# -- GameBanana: a mod's page link -> its files (the site's public API), one downloaded and checked
+GB_MOD = re.compile(r'gamebanana\.com/mods/(?:download/)?(\d+)', re.I)
+GB_API = 'https://gamebanana.com/apiv11/Mod/{}?_csvProperties=_sName,_aFiles,_aGame,_bIsPrivate,_bIsTrashed,_bIsWithheld'
+
+
+def gamebanana_mod(url, fetch=None):
+    """{'name', 'game', 'files'} of a GameBanana mod page link; ValueError when it is not one or cannot be had."""
+    import json
+    import urllib.request
+    m = GB_MOD.search(url or '')
+    if not m:
+        raise ValueError(f'{url}\n\nis not a GameBanana mod page (https://gamebanana.com/mods/<number>).')
+    if fetch is None:
+        def fetch(u):
+            req = urllib.request.Request(u, headers={'User-Agent': "Link's Tool Box"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.read()
+    try:
+        doc = json.loads(fetch(GB_API.format(m.group(1))))
+    except ValueError:
+        raise ValueError('GameBanana sent something that is not the mod\'s details.') from None
+    if not isinstance(doc, dict) or '_sName' not in doc:
+        raise ValueError(f'GameBanana has no mod {m.group(1)}' + (f': {doc.get("_sErrorMessage")}' if
+                                                                  isinstance(doc, dict) and doc.get('_sErrorMessage') else '.'))
+    if doc.get('_bIsPrivate') or doc.get('_bIsTrashed') or doc.get('_bIsWithheld'):
+        raise ValueError(f'{doc["_sName"]} is private, withheld or deleted on GameBanana.')
+    files = [f for f in doc.get('_aFiles') or [] if isinstance(f, dict) and f.get('_sDownloadUrl') and f.get('_sFile')]
+    return {'name': doc['_sName'], 'game': (doc.get('_aGame') or {}).get('_sName', ''), 'files': files}
+
+
+def gamebanana_files(info):
+    """The files worth offering: the current ones (old versions are 'archived' there), the newest first."""
+    files = [f for f in info['files'] if not f.get('_bIsArchived')] or info['files']
+    return sorted(files, key=lambda f: f.get('_tsDateAdded') or 0, reverse=True)
+
+
+def file_label(f):
+    size = f.get('_nFilesize') or 0
+    return f'{f["_sFile"]}' + (f'  (version {f["_sVersion"]})' if f.get('_sVersion') else '') + \
+        (f', {size / 1048576:.1f} MB' if size >= 1048576 else f', {size // 1024 + 1} KB' if size else '')
+
+
+def gamebanana_download(f, folder, download=None):
+    """The file into folder, under its own name (no folders in it), checked against GameBanana's MD5."""
+    import hashlib
+    if download is None:
+        import updater
+        download = updater.download
+    name = re.sub(r'[\\/:*?"<>|]', '_', Path(f['_sFile']).name).strip(' .') or 'mod.zip'
+    dest = Path(folder) / name
+    download(f['_sDownloadUrl'], dest)
+    want = (f.get('_sMd5Checksum') or '').lower()
+    if want and hashlib.md5(dest.read_bytes()).hexdigest() != want:
+        dest.unlink()
+        raise ValueError('the download is not the file GameBanana lists (its checksum differs): try again.')
+    return dest
+
+
+def is_generator(src, depth=2):
+    """A download of scripts that build a mod (a .py / .ps1 / .bat near the top, no romfs): not a mod to copy."""
+    src = Path(src)
+    for dirpath, dirs, files in os.walk(src):
+        if any(f.lower().endswith(('.py', '.ps1', '.bat', '.cmd')) for f in files):
+            return True
+        if len(Path(dirpath).relative_to(src).parts) >= depth:
+            dirs[:] = []
+    return False
+
+
+def pick_one(parent, title, labels, items):
+    """A small list to pick one of; None when closed."""
+    win = tk.Toplevel(parent)
+    win.title(title)
+    win.transient(parent)
+    win.configure(background=theme.BG)
+    box = tk.Listbox(win, height=min(len(labels), 10), width=60, activestyle='none', exportselection=False)
+    for t in labels:
+        box.insert('end', t)
+    box.selection_set(0)
+    box.pack(padx=12, pady=(12, 6), fill='both', expand=True)
+    out = {}
+    row = ttk.Frame(win)
+    row.pack(padx=12, pady=(0, 12), fill='x')
+    ok = lambda *_: (out.setdefault('i', box.curselection()[0] if box.curselection() else 0), win.destroy())
+    ttk.Button(row, text='Cancel', command=win.destroy).pack(side='right')
+    ttk.Button(row, text='OK', command=ok).pack(side='right', padx=(0, 6))
+    box.bind('<Double-1>', ok)
+    win.grab_set()
+    parent.wait_window(win)
+    return items[out['i']] if 'i' in out else None
+
 
 def unpack_archive(path):
     """A .rar / .7z / .tar.gz unpacked into a new temporary folder (the caller removes it), with the tar.exe Windows 10
@@ -371,6 +462,7 @@ class App(ttk.Frame):
         self.where.pack(side='left')
         ttk.Button(top, text='Open folder', command=lambda: nxsave.open_folder(MODS)).pack(side='right')
         ttk.Button(top, text='Refresh', command=self.reload).pack(side='right', padx=(0, 6))
+        ttk.Button(top, text='From a link...', command=self.from_link).pack(side='right', padx=(0, 6))
         ttk.Button(top, text='Add mods...', command=self.add_mods).pack(side='right', padx=(0, 6))
         ttk.Button(top, text='Code mods...', command=self.code_mods).pack(side='right', padx=(0, 6))
         # (code mods changed since the last Build: a line saying so)
@@ -747,6 +839,10 @@ class App(ttk.Frame):
                     elif code_only(src):
                         bad.append(f'{p.name}: Switch code only (an exefs part, no romfs): Longshot, Triforce and '
                                    'NX2navi cannot run it')
+                    elif is_generator(src):
+                        bad.append(f'{p.name}: scripts that make the mod on your PC from your game files, not a mod '
+                                   'itself. The toolbox does not run downloaded scripts: follow its README (it can '
+                                   'write into the mods folder itself).')
                     else:
                         bad.append(f'{p.name}: no mod in it (a mod has a "romfs" folder, a code mod a mod.json)')
                 except Exception as err:
@@ -767,6 +863,56 @@ class App(ttk.Frame):
         finally:
             for t in tmps:
                 shutil.rmtree(t, ignore_errors=True)
+
+    # -- a mod's page on GameBanana: its file downloaded, then added as a dropped file is
+    def from_link(self):
+        import busy
+        import tempfile
+        from tkinter import simpledialog
+        if running():
+            messagebox.showwarning('Add mods', f'Close {", ".join(running())} first.', parent=self)
+            return
+        try:
+            clip = self.clipboard_get()
+        except tk.TclError:
+            clip = ''
+        url = simpledialog.askstring('From a link', 'A mod\'s page on GameBanana\n(like https://gamebanana.com/mods/742970):',
+                                     initialvalue=clip if GB_MOD.search(clip or '') else '', parent=self)
+        if not url:
+            return
+        try:
+            info = busy.run(self, 'Looking up the mod on GameBanana...', lambda: gamebanana_mod(url), title='From a link')
+        except (ValueError, OSError) as err:
+            messagebox.showerror('From a link', str(err), parent=self)
+            return
+        files = gamebanana_files(info)
+        if not files:
+            messagebox.showinfo('From a link', f'{info["name"]} has no file to download.', parent=self)
+            return
+        if 'ocarina' not in info['game'].lower() and not messagebox.askyesno(
+                'From a link', f'{info["name"]} is a mod for {info["game"] or "another game"}, not Ocarina of Time.\n\n'
+                'Add it anyway?', icon='warning', parent=self):
+            return
+        f = files[0] if len(files) == 1 else pick_one(self, f'{info["name"]}: which file?',
+                                                       [file_label(x) for x in files], files)
+        if f is None:
+            return
+        if f.get('_sAvResult') not in (None, 'clean'):
+            messagebox.showerror('From a link', f'{f["_sFile"]}: GameBanana\'s virus scan says "{f["_sAvResult"]}". '
+                                 'Not downloaded.', parent=self)
+            return
+        if not messagebox.askyesno('From a link', f'Download {file_label(f)}\nfrom {info["name"]} on GameBanana, and add '
+                                   'it?', parent=self):
+            return
+        tmp = Path(tempfile.mkdtemp(prefix='linktoolbox-dl-'))
+        try:
+            path = busy.run(self, f'Downloading {f["_sFile"]}...', lambda: gamebanana_download(f, tmp),
+                            title='From a link')
+            self.add_paths([str(path)])
+        except (ValueError, OSError) as err:
+            messagebox.showerror('From a link', f'{f["_sFile"]} could not be downloaded:\n{err}', parent=self)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def add_code_mod(self, dropped, src):
         """A code mod dropped in: into Longshot's sources (asked first), then Build."""

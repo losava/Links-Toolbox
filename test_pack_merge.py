@@ -338,7 +338,8 @@ def _put(mods, folder, rel, data):
 
 def _dict_rom(dic, packs):
     files = {path: zs_pack(members, dic) for path, members in packs.items()}
-    files['Pack/ZsDic.pack.zs'] = zstd.compress(nxsave.write_sarc({'pack.zsdic': dic.dict_content}))
+    files['Pack/ZsDic.pack.zs'] = zstd.compress(nxsave.write_sarc({'pack.zsdic': dic.dict_content,
+                                                                    'zs.zsdic': dic.dict_content}))
     return Rom(files)
 
 
@@ -484,48 +485,65 @@ def test_follow_animation_lists():
     assert nxsave.byml(actor(OWN)) == {'Components': {'AnimationRef': '?' + OWN, 'ModelInfoRef': '?Component/M.bgyml'}}
     assert [e['ModelProjectName'] for e in nxsave.byml(cos)['AnimationResources']] == ['Cos_01', 'Cos_Npc']
     orig = {AP: actor(OWN), OWN: sets('G_01', 'G_02'), 'x': b'game x'}
-    adult = {AP: actor(OWN), OWN: sets('X_L1', 'X_L2', 'G_01', 'G_02'), 'x': b'game x'}   # (adult sets first)
+    adult = {AP: actor(OWN), OWN: sets('Adu_01', 'Adu_02', 'G_01', 'G_02'), 'x': b'game x'}   # (adult sets first)
     costume = {AP: actor(COS), OWN: sets('G_01', 'G_02'), COS: cos, 'x': b'game x'}
     # the function alone: first, retargeted like Cos_01; the list's own entries kept as they were
     both = {AP: actor(COS), OWN: adult[OWN], COS: cos, 'x': b'game x'}
     got, notes = pack_merge.follow_animation_lists(both, orig)
-    assert notes == [(AP, COS, ['X_L1', 'X_L2'])], notes
+    assert notes == [(AP, COS, ['Adu_01', 'Adu_02'])], notes
     assert nxsave.byml(got[COS])['AnimationResources'] == [
-        {'IsRetarget': True, 'ModelProjectName': 'X_L1', 'RetargetModel': 'Skeleton'},
-        {'IsRetarget': True, 'ModelProjectName': 'X_L2', 'RetargetModel': 'Skeleton'},
+        {'IsRetarget': True, 'ModelProjectName': 'Adu_01', 'RetargetModel': 'Skeleton'},
+        {'IsRetarget': True, 'ModelProjectName': 'Adu_02', 'RetargetModel': 'Skeleton'},
         {'IsRetarget': True, 'ModelProjectName': 'Cos_01', 'RetargetModel': 'Skeleton'},
         {'ModelProjectName': 'Cos_Npc'}]
     assert {k: v for k, v in got.items() if k != COS} == {k: v for k, v in both.items() if k != COS}
     # sets a mod put after the game's own go after the list's own; nothing to do when the actor keeps its own list
-    after = dict(both, **{OWN: sets('G_01', 'G_02', 'X_L1')})
+    after = dict(both, **{OWN: sets('G_01', 'G_02', 'Adu_01')})
     got, _n = pack_merge.follow_animation_lists(after, orig)
-    assert [e['ModelProjectName'] for e in nxsave.byml(got[COS])['AnimationResources']] == ['Cos_01', 'Cos_Npc', 'X_L1']
+    assert [e['ModelProjectName'] for e in nxsave.byml(got[COS])['AnimationResources']] == ['Cos_01', 'Cos_Npc', 'Adu_01']
     assert pack_merge.follow_animation_lists(adult, orig) == (adult, [])
     assert pack_merge.follow_animation_lists(got, orig)[1] == []          # (done once: not added twice)
     dic = train([b'alpha' * 30, b'beta' * 30, OWN.encode() * 20, b'Skeleton' * 20])
     rel = 'Pack/Actor/P.pack.zs'
+    skel = lambda name: zstd.compress(b'FRES skeleton of ' + name.encode() + b' bones' * 20, level=19, zstd_dict=dic)
+    sk = lambda name: pack_merge.skeleton_file(name)
     with tempfile.TemporaryDirectory() as tmp:
         mods = Path(tmp)
-        # two mods, separate packs: merged (adult's list, costume's switch) and followed
+        # two mods, separate packs: merged (adult's list, costume's switch) and followed; each added set gets a
+        # skeleton file of its own, the costume's renamed (the game never finishes loading Link without one)
         _put(mods, '01-Costume', rel, zs_pack(costume, dic))
+        _put(mods, '01-Costume', sk('Cos_01'), skel('Cos_01'))
         _put(mods, '02-Adult', rel, zs_pack(adult, dic))
         done = pack_merge.build(mods, ['01-Costume', '02-Adult'], rom=_dict_rom(dic, {rel: orig}), log=lambda _s: None)
-        assert done['clashes'] == [] and done['written'] == [rel], done
-        assert [(f[2], f[3]) for f in done['followed']] == [(COS, ['X_L1', 'X_L2'])]
+        assert done['clashes'] == [] and sorted(done['written']) == sorted([rel, sk('Adu_01'), sk('Adu_02')]), done
+        assert [(f[2], f[3]) for f in done['followed']] == [(COS, ['Adu_01', 'Adu_02'])]
         m = open_pack((mods / pack_merge.FOLDER / 'romfs' / rel).read_bytes(), dic)
         assert m[AP] == costume[AP] and m[OWN] == adult[OWN]
         assert [e['ModelProjectName'] for e in nxsave.byml(m[COS])['AnimationResources']] == [
-            'X_L1', 'X_L2', 'Cos_01', 'Cos_Npc']
+            'Adu_01', 'Adu_02', 'Cos_01', 'Cos_Npc']
+        made = zstd.decompress((mods / pack_merge.FOLDER / 'romfs' / sk('Adu_02')).read_bytes(), zstd_dict=dic)
+        assert made == b'FRES skeleton of Adu_02' + b' bones' * 20, made
     with tempfile.TemporaryDirectory() as tmp:
         mods = Path(tmp)
         # one mod already carrying both changes (one combined pack): written although nothing else needs a merge
         _put(mods, '01-Both', rel, zs_pack(both, dic))
+        _put(mods, '01-Both', sk('Cos_01'), skel('Cos_01'))
         done = pack_merge.build(mods, ['01-Both'], rom=_dict_rom(dic, {rel: orig}), log=lambda _s: None)
-        assert done['written'] == [rel] and done['clashes'] == []
+        assert rel in done['written'] and done['clashes'] == []
         # and a pack one mod carries that is not readable is left as it is, quietly
         _put(mods, '02-Odd', 'Pack/Actor/Q.pack.zs', b'not a pack')
         done = pack_merge.build(mods, ['01-Both', '02-Odd'], rom=_dict_rom(dic, {rel: orig}), log=lambda _s: None)
-        assert done['skipped'] == [] and done['written'] == [rel]
+        assert done['skipped'] == [] and rel in done['written']
+        # a set that has a skeleton already (the game's here): listed, no file made for it
+        rom = _dict_rom(dic, {rel: orig})
+        rom = Rom(dict(rom._files, **{sk('Adu_01'): skel('Adu_01')}))
+        done = pack_merge.build(mods, ['01-Both'], rom=rom, log=lambda _s: None)
+        assert sorted(done['written']) == sorted([rel, sk('Adu_02')]), done
+        # no skeleton to make one from (a name of another length, or none at all): the set is left out, so the
+        # list stays as the costume's and nothing is written
+        (mods / '01-Both' / 'romfs' / sk('Cos_01')).unlink()
+        done = pack_merge.build(mods, ['01-Both'], rom=_dict_rom(dic, {rel: orig}), log=lambda _s: None)
+        assert done['written'] == [] and done['followed'] == [], done
         # an actor that keeps its own list: nothing written, no folder
         shutil.rmtree(mods)
         mods.mkdir()

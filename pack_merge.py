@@ -19,7 +19,9 @@ to the actor's own list (Adult Motions' rescaled adult sets) are never used. Whe
 sets go into the list it points at too: first, in the order the mod gave them (the game takes a clip from the later
 set when two share a name, so the costume's own clips still win), and retargeted the way that list's own sets are
 (IsRetarget / RetargetModel copied from them). Such a pack is written to ~Merged Packs even when only one mod carries
-it. Nothing else in the list changes.
+it. Nothing else in the list changes. A retargeted set needs a skeleton file of its own (Model/<set>.Skeleton.bfres.zs:
+without one the game never finishes loading the actor, so young Link never appeared); one is written to ~Merged Packs
+from the costume's own, renamed, and a set none can be made for is left out of the list.
 """
 import os
 import shutil
@@ -160,10 +162,17 @@ def _ref(members, actor_param, key):
     return ref.lstrip('?') if isinstance(ref, str) else None
 
 
-def follow_animation_lists(members, original):
+def skeleton_file(name):
+    return f'Model/{name}.Skeleton.bfres.zs'
+
+
+def follow_animation_lists(members, original, skeleton=None, files=None):
     """(members, notes): when an ActorParam in the final pack points its AnimationRef at another list than the game's
     own, the sets mods added to the game's own list go into the list it points at too (see the module notes).
-    notes: [(actor param, list now used, [sets added])]. Does not mutate its inputs."""
+    notes: [(actor param, list now used, [sets added])]. Does not mutate its inputs.
+    skeleton(set, [the list's retargeted sets]): a retargeted set needs its own Model/<set>.Skeleton.bfres.zs (the
+    game waits for it, and Link never appears): b'' when there is one already, the file's bytes to write (put in
+    files), None when none can be made (the set is then left out)."""
     result, notes = dict(members), []
     for ap in sorted(m for m in members if m.endswith('.engine__actor__ActorParam.bgyml')):
         if ap not in original:
@@ -187,6 +196,19 @@ def follow_animation_lists(members, original):
         # retargeted the way the list's own sets are (a costume's model plays the player's animations through it)
         style = next(({k: v for k, v in e.items() if k != 'ModelProjectName'} for e in target if e.get('IsRetarget')),
                      {})
+        if style.get('IsRetarget') and skeleton:
+            sources = [e['ModelProjectName'] for e in target if e.get('IsRetarget')]
+            kept = []
+            for s in added:
+                made = skeleton(s, sources)
+                if made is None:
+                    continue
+                if made and files is not None:
+                    files[skeleton_file(s)] = made
+                kept.append(s)
+            added = kept
+            if not added:
+                continue
         new = [dict(style, ModelProjectName=s) for s in added]
         # where the mod put them: before the game's own sets (it wants those to win) or after them
         names = [e['ModelProjectName'] for e in modded]
@@ -196,6 +218,53 @@ def follow_animation_lists(members, original):
         result[used] = write_anim_list(entries)
         notes.append((ap, used, added))
     return result, notes
+
+
+def _skeleton_maker(mods_dir, mod_folders, rom):
+    """follow_animation_lists' skeleton(): a set's skeleton file from the mods that are on (the later wins) or the game;
+    else one made from a retargeted set's of the same list with the name inside changed (a costume ships one per set,
+    byte for byte the same but for that name; a name of the same length only, so nothing in the file moves)."""
+    folders = [f for f in mod_folders if not str(f).startswith('~')]
+    plain = {}
+
+    def raw(name):
+        rel = skeleton_file(name)
+        for folder in reversed(folders):
+            p = Path(mods_dir) / folder / 'romfs' / rel
+            if p.is_file():
+                return p.read_bytes()
+        for path in rom.by_path:
+            if path.lower() == rel.lower():
+                return rom.load(path)
+        return None
+
+    def make(name, sources):
+        if raw(name) is not None:
+            return b''
+        if 'dic' not in plain:
+            try:
+                d = nxsave.sarc_members(zstd.decompress(rom.load('Pack/ZsDic.pack.zs'))).get('zs.zsdic')
+                plain['dic'] = zstd.ZstdDict(d) if d else None
+            except (OSError, ValueError, KeyError, zstd.ZstdError):
+                plain['dic'] = None
+        if plain['dic'] is None:
+            return None
+        for src in sources:
+            if len(src) != len(name):
+                continue
+            blob = raw(src)
+            if blob is None:
+                continue
+            try:
+                data = zstd.decompress(blob, zstd_dict=plain['dic'])
+            except zstd.ZstdError:
+                continue
+            if data.count(src.encode()) != 1 or name.encode() in data:
+                continue
+            return zstd.compress(data.replace(src.encode(), name.encode()), level=LEVEL, zstd_dict=plain['dic'])
+        return None
+
+    return make
 
 
 def _carried(mods_dir, folders):
@@ -301,7 +370,10 @@ def build(mods_dir, mod_folders, game=None, log=print, rom=None):
                     rel = _canon(rom, key, owners)
                     for member, loser, winner in fights:
                         clashes.append((rel, member, loser, winner))
-                    merged, notes = follow_animation_lists(merged, original)
+                    extra = {}
+                    merged, notes = follow_animation_lists(merged, original, _skeleton_maker(mods_dir, mod_folders, rom),
+                                                           extra)
+                    written.extend(extra.items())
                     for ap, used, added in notes:
                         followed.append((rel, ap, used, added))
                         log(f'merged packs: {rel}: {Path(used).name} now also lists {", ".join(added)} '
@@ -325,8 +397,11 @@ def build(mods_dir, mod_folders, game=None, log=print, rom=None):
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(blob)
     if written:
-        log(f'merged packs: {len(written)} pack{"s" if len(written) != 1 else ""}, '
-            f'{len(clashes)} member clash{"es" if len(clashes) != 1 else ""}')
+        packs = sum(1 for rel, _b in written if rel.lower().endswith('.pack.zs'))
+        skeletons = len(written) - packs
+        log(f'merged packs: {packs} pack{"s" if packs != 1 else ""}, '
+            f'{len(clashes)} member clash{"es" if len(clashes) != 1 else ""}'
+            + (f', {skeletons} skeleton file{"s" if skeletons != 1 else ""} for added animation sets' if skeletons else ''))
     elif not skipped:
         log('merged packs: no pack carried by two mods that are on needs one')
     return {'written': [rel for rel, _b in written], 'clashes': clashes, 'skipped': skipped, 'followed': followed}

@@ -288,7 +288,10 @@ def pick_one(parent, title, labels, items):
     win.title(title)
     win.transient(parent)
     win.configure(background=theme.BG)
-    box = tk.Listbox(win, height=min(len(labels), 10), width=60, activestyle='none', exportselection=False)
+    box = tk.Listbox(win, height=min(len(labels), 10), width=max(40, min(90, max(map(len, labels)) + 2)),
+                     activestyle='none', exportselection=False, background=theme.PANEL, foreground=theme.TEXT,
+                     selectbackground=theme.SELECT, selectforeground=theme.TEXT, highlightthickness=0,
+                     borderwidth=0, font=theme.FONT)
     for t in labels:
         box.insert('end', t)
     box.selection_set(0)
@@ -701,25 +704,18 @@ class App(ttk.Frame):
         except Exception:
             pass
         bundled = bundled_mods()
-        src = None
+        # one question, three plain answers (two yes/no boxes in a row sent people to a folder picker by mistake)
+        choices = ['A .zip file (or .rar / .7z): a download, HookyCreator...', 'A folder (a mod with romfs inside, '
+                   'or a folder of mods)']
         if bundled:
-            answer = messagebox.askyesnocancel(
-                'Add mods', f'Add the {len(bundled)} mods that came with the toolbox?\n\n' +
-                '\n'.join('  ' + plain(p.name) + ('   (comes switched off)' if p.name.startswith(('_', '-')) else '')
-                          for p in bundled) + '\n\nYes: add these.   No: pick another folder.',
-                parent=self)
-            if answer is None:
-                return
-            src = BUNDLED if answer else None
+            choices.append(f'The {len(bundled)} mods that came with the toolbox')
+        kind = pick_one(self, 'Add mods: what do you want to add?', choices, ['zip', 'folder', 'bundled'][:len(choices)])
+        if kind is None:
+            return
+        src = BUNDLED if kind == 'bundled' else None
         tmp = None
         if src is None:
-            kind = messagebox.askyesnocancel(
-                'Add mods', 'Is the mod a .zip file (or .rar / .7z)?\n\nYes: pick the file (from HookyCreator, a '
-                'download...).   '
-                'No: pick a folder.', parent=self)
-            if kind is None:
-                return
-            if kind:
+            if kind == 'zip':
                 path = filedialog.askopenfilename(parent=self, title='The mod (.zip)',
                                                   filetypes=[('Mod files', '*.zip *.rar *.7z *.tar *.gz *.tgz'),
                                                              ('All files', '*.*')])

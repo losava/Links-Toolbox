@@ -153,8 +153,8 @@ class Toolbox:
         self.save_var = tk.StringVar(value=settings.get('save_dir', ''))
         self.game_at_start = nxsave.game_dir()
         rows = (('Game folder', self.game_var, self.found_game(),
-                 'The folder with Triforce.exe (or Longshot\'s longshot.exe) and romfs, or the folder Longshot builds its '
-                 'versions in (like rc): then the newest is used. Changing it takes effect when the toolbox is opened again.'),
+                 'The folder with Triforce.exe or longshot.exe and romfs, or Longshot\'s folder of versions (like rc). '
+                 'Used once the toolbox is opened again.'),
                 ('Mods folder', self.mods_var, mod_loader.DEFAULT_MODS,
                  'The folder of mod folders the Mods tab lists and switches on and off.'),
                 ('Saves folder', self.save_var, nxsave.game_dir() / 'user' / 'save',

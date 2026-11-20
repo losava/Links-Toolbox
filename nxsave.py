@@ -510,6 +510,19 @@ def longshot_version(build):
     return build_version(build, 'Longshot')
 
 
+def applies_patches(game=None):
+    """The game applies mods' code patches (exefs\\*.ips, *.pchtxt) when it is built: Longshot from nightly-591 (its
+    pull request #134) and its releases after v3.0.0. Plugins (subsdk) are not run by any of them."""
+    game = Path(game or game_dir())
+    if app_of(game) != 'Longshot':
+        return False
+    v = longshot_version(game)
+    m = re.match(r'nightly-(\d+)', v)
+    if m:
+        return int(m.group(1)) >= 591
+    return bool(re.match(r'v?\d', v)) and version_key(v, game) > version_key('v3.0.0')
+
+
 def builds_of(app):
     """[(version, folder)] of every build of an app found (Triforce, Longshot, NX2navi...), the newest first."""
     exe = dict(APPS).get(app)

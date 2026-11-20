@@ -29,6 +29,7 @@ GAME = nxsave.game_dir()
 DEFAULT_MODS = nxsave.mods_dir_for(GAME)     # (Longshot with a shared mods folder: that one)
 MODS = DEFAULT_MODS
 GAME_EXE = nxsave.game_exe(GAME) or GAME / 'Triforce.exe'
+PATCHES = nxsave.applies_patches(GAME)       # (Longshot nightly-591 and later builds mods' .ips / .pchtxt in)
 
 
 def set_mods_dir(path=None):
@@ -67,19 +68,36 @@ EXEFS_WHY = ('An exefs part is code for the Switch: .ips / .pchtxt patches, or a
              'never run it: only a mod\'s romfs part (its game files) loads.')
 
 
+PATCH_WHY = ('Its exefs part is code patches (.ips / .pchtxt). This Longshot build applies them when the game is built: '
+             'after Save, build the game again in the Longshot Launcher to apply a new or changed patch.')
+
+
 def has_exefs(folder):
     """A mod folder with an exefs folder that has files in it."""
     d = Path(folder) / 'exefs'
     return d.is_dir() and any(p.is_file() for p in d.rglob('*'))
 
 
+def patch_only(folder):
+    """A mod whose exefs part is only code patches (.ips / .pchtxt), no plugin."""
+    d = Path(folder) / 'exefs'
+    files = [p for p in d.rglob('*') if p.is_file()] if d.is_dir() else []
+    return bool(files) and all(p.suffix.lower() in ('.ips', '.pchtxt') for p in files)
+
+
+def patches_used(folder):
+    """The game in use applies this mod's code patches (Longshot nightly-591 and later)."""
+    return PATCHES and patch_only(folder)
+
+
 def code_only(src, depth=4):
-    """The folders in src (up to depth down) that are a mod with only an exefs part: nothing the PC ports can load."""
+    """The folders in src (up to depth down) that are a mod with only an exefs part: nothing the PC ports can load
+    (code patches are, on a Longshot build that applies them: find_mod_folders has those)."""
     src = Path(src)
     out = []
     for dirpath, dirs, _files in os.walk(src):
         here = Path(dirpath)
-        if 'exefs' in dirs and 'romfs' not in dirs and has_exefs(here):
+        if 'exefs' in dirs and 'romfs' not in dirs and has_exefs(here) and not patches_used(here):
             out.append(here)
             dirs[:] = []
         elif len(here.relative_to(src).parts) >= depth:
@@ -109,8 +127,9 @@ class Mod:
                     low = rel.lower()
                     self.files.add(low)
                     self.paths[low] = rel
-        self.loads = romfs.is_dir()               # Triforce loads RomFS mods only
         self.exefs = has_exefs(MODS / folder)     # (code for the Switch: the PC ports never run it)
+        self.patches = self.exefs and patches_used(MODS / folder)   # (code patches this Longshot build applies)
+        self.loads = romfs.is_dir() or self.patches   # Triforce loads RomFS mods only
 
     def target(self, place):
         return f'{place:02d}-{self.name}' if self.on and self.loads else f'_{self.name}'
@@ -172,9 +191,10 @@ BUNDLED = Path(__file__).resolve().parent.parent / 'mods'
 def mod_folders(src):
     """The mod folders in a folder (a folder with romfs in it is one mod itself)."""
     src = Path(src)
-    if (src / 'romfs').is_dir():
+    is_mod = lambda p: (p / 'romfs').is_dir() or patches_used(p)
+    if is_mod(src):
         return [src]
-    return sorted(p for p in src.iterdir() if p.is_dir() and (p / 'romfs').is_dir()) if src.is_dir() else []
+    return sorted(p for p in src.iterdir() if p.is_dir() and is_mod(p)) if src.is_dir() else []
 
 
 def find_mod_folders(src, depth=4):
@@ -183,7 +203,7 @@ def find_mod_folders(src, depth=4):
     out = []
     for dirpath, dirs, _files in os.walk(src):
         here = Path(dirpath)
-        if 'romfs' in dirs:
+        if 'romfs' in dirs or ('exefs' in dirs and patches_used(here)):
             out.append(here)
             dirs[:] = []
         elif len(here.relative_to(src).parts) >= depth:
@@ -499,7 +519,10 @@ class App(ttk.Frame):
                 state = '; '.join(lost + won)
                 tag = 'clash' if lost else ''
                 problems += bool(lost)
-            if m.loads and m.exefs:
+            if m.patches:
+                state = ('code patch: build the game again to apply changes' + (f'; {state}' if state else '')
+                         if m.on else state)
+            elif m.loads and m.exefs:
                 state = 'its exefs part (Switch code) is skipped' + (f'; {state}' if state else '')
             self.tree.insert('', 'end', iid=str(i), tags=(tag,) if tag else (),
                              values=('☑' if m.on and m.loads else '☐', m.name, state))
@@ -535,7 +558,7 @@ class App(ttk.Frame):
             return
         m = self.mods[i]
         self.note['text'] = '\n'.join(t for t in (NOTES.get(m.name, ''), self.pack_notes.get(m.name, ''),
-                                                  EXEFS_WHY if m.exefs else '') if t)
+                                                  PATCH_WHY if m.patches else EXEFS_WHY if m.exefs else '') if t)
 
     def click(self, event):
         if self.tree.identify_region(event.x, event.y) == 'cell' and self.tree.identify_column(event.x) == '#1':
@@ -651,7 +674,7 @@ class App(ttk.Frame):
     def _add_folders(self, folders):
         # (the questions first: the copying then runs in the background, with the Working... window)
         # mods with an exefs part: only their romfs part can load on the PC ports
-        code = [s for s in folders if not s.name.startswith('~') and has_exefs(s)]
+        code = [s for s in folders if not s.name.startswith('~') and has_exefs(s) and not patches_used(s)]
         romfs_only = set()
         if code:
             answer = messagebox.askyesnocancel(

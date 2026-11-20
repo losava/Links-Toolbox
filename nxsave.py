@@ -417,8 +417,34 @@ def is_game_dir(d):
     return d.is_dir() and (any(program(d, n) for n in GAME_EXES) or (d / 'romfs').is_dir())
 
 
+def version_folders(d):
+    """The game folders one level inside a folder (Longshot's launcher now builds each version in a folder of its own:
+    Games\\Longshot\\rc\\v3.0.0), the newest version first. [] when there are none."""
+    d = Path(d)
+    try:
+        found = [p for p in d.iterdir() if p.is_dir() and any(program(p, n) for n in GAME_EXES)]
+    except OSError:
+        return []
+    return sorted(found, key=lambda p: version_key(build_version(p), p, next(
+        (n for n in GAME_EXES if program(p, n)), None)), reverse=True)
+
+
+def resolve_game_dir(d):
+    """A game folder as picked: itself when the game is in it (the old way), else the newest version folder inside it
+    (the new way: picking Games\\Longshot\\rc follows each new version built under it). None when neither."""
+    if not d:
+        return None
+    if is_game_dir(d):
+        return Path(d)
+    found = version_folders(d)
+    return found[0] if found else None
+
+
 def _game_dir_candidates():
-    yield load_settings().get('game_dir')                   # picked in the toolbox's Folders tab
+    picked = load_settings().get('game_dir')                # picked in the toolbox's Folders tab
+    yield picked
+    if picked and not is_game_dir(picked):                  # (a folder of versions: the newest first)
+        yield from version_folders(picked)
     try:                                                    # the NX2navi launcher's own setting
         yield json.loads((ROOT / 'data' / 'launcher.json').read_text(encoding='utf-8')).get('game_dir')
     except (OSError, ValueError):
@@ -439,12 +465,23 @@ def _game_dir_candidates():
     homes = [HOME / 'Games' / 'Longshot']
     if not WINDOWS:
         homes += [HOME / '.local' / 'share' / 'longshot', HOME / 'Games' / 'longshot']
+    # (and now one folder per version inside those: Games\Longshot\rc\v3.0.0)
     for longshot in homes:
         yield longshot
         if longshot.is_dir():
-            yield from sorted((p for p in longshot.iterdir() if program(p, 'longshot.exe')),
-                              key=lambda p: p.stat().st_mtime, reverse=True)
-    yield from remembered('games')     # game folders typed in the Folders tab and kept
+            try:
+                channels = sorted((p for p in longshot.iterdir() if p.is_dir()),
+                                  key=lambda p: p.stat().st_mtime, reverse=True)
+            except OSError:
+                channels = []
+            for channel in channels:
+                if program(channel, 'longshot.exe'):
+                    yield channel
+                yield from version_folders(channel)
+    for kept in remembered('games'):   # game folders typed in the Folders tab and kept (a folder of versions: each)
+        yield kept
+        if not is_game_dir(kept):
+            yield from version_folders(kept)
 
 
 # --------------------------------------------------------------------------- Longshot builds, and one shared mods folder
@@ -649,9 +686,35 @@ def load_settings():
         return dict(SETTINGS_OVERRIDE)
     try:
         d = json.loads(SETTINGS.read_text(encoding='utf-8'))
-        return d if isinstance(d, dict) else {}
     except (OSError, ValueError):
         return {}
+    if not isinstance(d, dict):
+        return {}
+    for k in ('mods_dir', 'save_dir'):     # (a folder inside a build that has moved into a version folder: follow it)
+        if isinstance(d.get(k), str) and d[k]:
+            d[k] = follow_versions(d[k])
+    for k in ('remembered_mods', 'remembered_saves'):
+        if isinstance(d.get(k), list):
+            d[k] = [follow_versions(p) if isinstance(p, str) else p for p in d[k]]
+    return d
+
+
+def follow_versions(p):
+    """A folder that was inside a game folder (Games\\Longshot\\rc\\mods, rc\\user\\save) whose game has since moved into
+    a version folder (rc\\v3.0.0): the same folder in the newest version. Left as it is while it is still there."""
+    p = Path(p)
+    if p.exists():
+        return str(p)
+    for up in p.parents:
+        if up.is_dir():
+            if is_game_dir(up):
+                break                    # (the game is still there: the folder is just missing)
+            for v in version_folders(up):
+                moved = v / p.relative_to(up)
+                if moved.exists():
+                    return str(moved)
+            break
+    return str(p)
 
 
 def save_settings(d):

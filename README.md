@@ -2,7 +2,7 @@
 
 # Link's Tool Box
 
-**Mod loader and save editor for *The Legend of Zelda: Ocarina of Time* on [Longshot](https://git.magicbean.dev/MagicBeanDev/Longshot)** early support, since in development; see [Longshot](#longshot) below), the PC port. It also works with (Triforce (I do not recommenend Trifroce))
+**Mod loader and save editor for *The Legend of Zelda: Ocarina of Time* on [Longshot](https://git.magicbean.dev/MagicBeanDev/Longshot), the PC port** (still in development; see [Longshot](#longshot) below). It also works with Triforce, but I don't recommend it.
 
 One small Windows app to switch your mods on and off before you play, and to edit your saves (hearts, magic, rupees, items, ammo, bottles, keys and story progress) using the names the game itself uses.
 
@@ -29,7 +29,7 @@ Or get **`Link Toolbox.zip`** from the [Releases](../../releases) page, then use
 
 **Linux (new, untested):** get **`Link Toolbox (Linux).tar.gz`** instead, unpack it (`tar xzf "Link Toolbox (Linux).tar.gz"`) and open **`Link Toolbox.sh`**. It uses your system's Python, which must be **3.10 or newer with Tk** (`python3-tk`, `python3-tkinter` or `tk`); on a Python older than 3.14 it also needs **zstandard** (`python3-zstandard` or `python-zstandard`) to read the game's packed files. If something is missing, the script says what to install. If the toolbox cannot start, it says why and writes the details to `Link Toolbox error.log` next to the script. It works best with Longshot's Linux build, whose saves are in `~/.local/share/longshot/save`. The slot picture needs Pillow, ImageMagick or ffmpeg. The Linux version hasn't been tried on a real Linux PC yet, so please report what works.
 
-The first time, it also makes a **Link's Tool Box** shortcut with the toolbox's icon next to the `.bat` file (a `.bat` can't have an icon of its own), so you can use that shortcut from then on. There's nothing to install: the zip brings its own Python. You need Windows 10 or 11 and a game built with Triforce (or Longshot). The toolbox finds the game where Triforce installed it, or asks you once for the folder that has `Triforce.exe` (or `longshot.exe`).
+The first time, it also makes a **Link's Tool Box** shortcut with the toolbox's icon next to the `.bat` file (a `.bat` can't have an icon of its own), so you can use that shortcut from then on. There's nothing to install: the zip brings its own Python. You need Windows 10 or 11 and a game built with Longshot. The toolbox finds the game where Longshot's launcher built it (`Games\Longshot`), or asks you once for the folder that has `longshot.exe`.
 
 ## Mods included
 
@@ -50,7 +50,7 @@ Each mod can also be downloaded on its own (the **Download** links below): add i
 
 **Biggoron One-Handed** and **Young Link Two-Handed Swords** change the same file, so only one can be on. One-Handed comes switched on. To swing it with two hands, switch One-Handed off and Two-Handed on in the Mods tab, then press **Save**.
 
-They're made for **Ocarina of Time v131072** built with Triforce, and may not work on another version. Pressing Save also builds the size table (`~Size Table`) from your own game, and merges `.pack.zs` files that more than one mod changes (`~Merged Packs`).
+They're made for **Ocarina of Time v131072** built with Longshot, and may not work on another version. Pressing Save also builds the size table (`~Size Table`) from your own game, and merges `.pack.zs` files that more than one mod changes (`~Merged Packs`).
 
 ## Features
 
@@ -212,6 +212,6 @@ The names of the save's entries aren't stored in this repository. The toolbox re
 
 Link's Tool Box by **Cum_Dumpster**, released under the [MIT License](LICENSE).
 
-Works with [Triforce](https://git.triforceproject.com/triforce/source) and [Longshot](https://git.magicbean.dev/MagicBeanDev/Longshot) (by MagicBeanDev and the Longshot contributors, a continuation of Hookshot by NotRexed). Neither is part of this project, and neither ships with it.
+Made for [Longshot](https://git.magicbean.dev/MagicBeanDev/Longshot) (by MagicBeanDev and the Longshot contributors, a continuation of Hookshot by NotRexed). It also works with [Triforce](https://git.triforceproject.com/triforce/source). Neither is part of this project, and neither ships with it.
 
 This is a fan-made tool, not affiliated with or endorsed by Nintendo. The source code in this repository contains no game files. The included mods are changed copies of a few game files, and are only in the release download. You need your own copy of the game.

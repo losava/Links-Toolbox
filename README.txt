@@ -1,11 +1,11 @@
 ===============================================================================
                               LINK'S TOOL BOX
-   Mod loader + save editor for Zelda: Ocarina of Time (Triforce / Longshot)
+        Mod loader + save editor for Zelda: Ocarina of Time (Longshot)
                               by Cum_Dumpster
 ===============================================================================
 
 Link's Tool Box is a small Windows app for people who play Ocarina of Time
-through Triforce. In one window it lets you:
+on Longshot, the PC port (Triforce still works too). In one window it lets you:
 
   * turn your mods on and off before you play, and choose which one wins
     when two mods change the same file
@@ -51,14 +51,14 @@ The first time, it also makes a "Link's Tool Box" shortcut with the toolbox's
 icon next to the .bat (a .bat file can't have an icon of its own). Use that
 shortcut from then on, or make one on your Desktop in the Look tab.
 
-The first time, the toolbox looks for your game where Triforce installed it.
-If it can't find it, it asks once: pick the folder that has Triforce.exe (or longshot.exe)
-and the "romfs" folder in it. You can change it later in the Folders tab.
+The first time, the toolbox looks for your game where Longshot's launcher
+built it (Games\Longshot). If it can't find it, it asks once: pick the folder
+that has longshot.exe and the "romfs" folder in it. You can change it later in the Folders tab.
 
 The first time you open the save editor, it reads the item and flag names
 from your game files. That takes a little while, but only once.
 
-Needs Windows 10 or 11 and a game built with Triforce (or Longshot, below).
+Needs Windows 10 or 11 and a game built with Longshot (see LONGSHOT below).
 
 LINUX (the "Link Toolbox (Linux).tar.gz" download):
   1. Unpack it anywhere:  tar xzf "Link Toolbox (Linux).tar.gz"
@@ -141,7 +141,7 @@ To install them:
   3. Start the game (or press Save and play).
 
 They need the same game version they were made for: The Legend of Zelda:
-Ocarina of Time v131072, built with Triforce. On another version
+Ocarina of Time v131072, built with Longshot. On another version
 they may crash or not work. Turn them off in the Mods tab at any time.
 Tip: give young Link the Master Sword or Biggoron Sword in the save editor's
 Inventory tab to try them.
@@ -335,7 +335,7 @@ Inventory tab to try them.
 -------------------------------------------------------------------------------
 
   Link's Tool Box by Cum_Dumpster.
-  Built for the Triforce PC port of Ocarina of Time.
+  Built for Longshot, the PC port of Ocarina of Time.
   Python is included under its own license (python\LICENSE.txt).
 
   This is a fan-made tool, not affiliated with Nintendo. You need your own

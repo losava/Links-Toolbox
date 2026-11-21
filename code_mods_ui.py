@@ -52,8 +52,10 @@ class CodeMods(tk.Toplevel):
         self.build_note = ttk.Label(bottom, text='', wraplength=520, justify='left')
         self.build_note.pack(side='left', fill='x', expand=True)
         ttk.Button(bottom, text='Close', command=self.destroy).pack(side='right')
-        self.launcher_btn = ttk.Button(bottom, text='Open the Longshot Launcher (to Build)', command=self.open_launcher)
+        self.launcher_btn = ttk.Button(bottom, text='Open the Longshot Launcher', command=self.open_launcher)
         self.launcher_btn.pack(side='right', padx=(0, 8))
+        ttk.Button(bottom, text='Build the game now', command=lambda: build_game(
+            self, on_done=lambda _ok: (self.refresh(), self.on_change()))).pack(side='right', padx=(0, 8))
         self.packages = []
         self.refresh()
         try:
@@ -157,3 +159,91 @@ class CodeMods(tk.Toplevel):
         exe = cm.launcher_exe()
         if exe:
             subprocess.Popen([str(exe)], cwd=str(exe.parent))
+
+
+# ------------------------------------------------------------------------------- Build the game (the launcher's builder)
+def build_game(parent, game=None, on_done=lambda ok: None):
+    """Builds the game folder again with the launcher's own builder (code patches and code mods go in at a build), in
+    a window that shows how far it is. Asks first; refuses while the game runs."""
+    import nxsave
+    import threading
+    game = Path(game or nxsave.game_dir())
+    try:
+        cmd = cm.build_command(game)
+    except cm.CodeModError as err:
+        messagebox.showerror('Build the game', str(err), parent=parent)
+        return
+    running = nxsave.game_running()
+    if running and running.lower() != 'longshotlauncher.exe':
+        messagebox.showwarning('Build the game', f'Close {running} first: the build rewrites the game\'s files.',
+                               parent=parent)
+        return
+    version = nxsave.longshot_version(game)
+    msg = (f'Build Longshot {version} again now?\n\n{game}\n\nIt puts your code patches and code mods into the game. '
+           'It takes a few minutes (15 to 30 the first time); your saves, settings and mods stay.')
+    if running:
+        msg += '\n\nThe Longshot Launcher is open: don\'t start a build in it at the same time.'
+    if not messagebox.askyesno('Build the game', msg, parent=parent):
+        return
+    win = tk.Toplevel(parent)
+    win.title(f'Building Longshot {version}')
+    win.transient(parent.winfo_toplevel())
+    win.resizable(False, False)
+    frm = ttk.Frame(win, padding=(18, 14))
+    frm.pack(fill='both', expand=True)
+    head = ttk.Label(frm, text=f'Building Longshot {version}...', font=(theme.FAMILY, 10, 'bold'))
+    head.pack(anchor='w')
+    bar = ttk.Progressbar(frm, mode='indeterminate', length=520)
+    bar.pack(fill='x', pady=(10, 6))
+    bar.start(12)
+    line = ttk.Label(frm, text='Starting...', foreground=theme.SOFT, wraplength=520, justify='left')
+    line.pack(anchor='w')
+    row = ttk.Frame(frm)
+    row.pack(fill='x', pady=(12, 0))
+    close = ttk.Button(row, text='Close', command=win.destroy, state='disabled')
+    close.pack(side='right')
+    win.protocol('WM_DELETE_WINDOW', lambda: None if str(close['state']) == 'disabled' else win.destroy())
+    theme.center(win, parent)
+    log_path = game / 'logs' / 'link-toolbox-build.log'
+    lines, state = [], {}
+
+    def job():
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_path, 'w', encoding='utf-8', errors='replace') as log:
+                p = subprocess.Popen(cmd, cwd=str(Path(cmd[0]).parent), stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace',
+                                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                for text in p.stdout:
+                    log.write(text)
+                    if text.strip():
+                        lines.append(text.strip())
+                state['code'] = p.wait()
+        except OSError as err:
+            lines.append(str(err))
+            state['code'] = -1
+
+    def poll():
+        if not win.winfo_exists():
+            return
+        if lines:
+            line['text'] = lines[-1][:300]
+        if 'code' not in state:
+            win.after(400, poll)
+            return
+        bar.stop()
+        ok = state['code'] == 0
+        bar.configure(mode='determinate', maximum=100, value=100 if ok else 0)
+        if ok:
+            cm.mark_built(game)
+            head['text'] = f'Longshot {version} is built.'
+            line['text'] = 'Your code patches and code mods are in the game. Start it to play.'
+        else:
+            head['text'] = f'The build stopped (code {state["code"]}).'
+            line['text'] = ((lines[-1][:300] + '\n\n') if lines else '') + f'The whole log: {log_path}'
+        close['state'] = 'normal'
+        close.focus_set()
+        on_done(ok)
+
+    threading.Thread(target=job, daemon=True).start()
+    win.after(400, poll)

@@ -69,7 +69,7 @@ EXEFS_WHY = ('An exefs part is code for the Switch: .ips / .pchtxt patches, or a
 
 
 PATCH_WHY = ('Its exefs part is code patches (.ips / .pchtxt). This Longshot build applies them when the game is built: '
-             'after Save, build the game again in the Longshot Launcher to apply a new or changed patch.')
+             'after Save, press Build game (below) to apply a new or changed patch.')
 
 
 def has_exefs(folder):
@@ -550,6 +550,8 @@ class App(ttk.Frame):
         self.save_btn.pack(side='right', padx=(0, 6))
         ttk.Checkbutton(bottom, text='Save while the game runs', variable=nxsave.ignore_running_var(self),
                         command=self.toggle_ignore_running).pack(side='right', padx=(0, 12))
+        if nxsave.is_longshot(GAME):      # (code patches and code mods go in when Longshot builds the game)
+            ttk.Button(bottom, text='Build game', command=self.build_game).pack(side='right', padx=(0, 12))
         self.status = theme.wrapping_label(bottom)
         self.status.pack(side='left', fill='x', expand=True)
         self.reload()
@@ -608,7 +610,7 @@ class App(ttk.Frame):
                 text = (f'Code mods are missing in Longshot {", ".join(missing)} (a Longshot update): click here, '
                         'then Put them back and Build.')
             elif needs:
-                text = 'Code mods changed: press Build in the Longshot Launcher (click here for the Code mods window).'
+                text = 'Code mods changed: the game needs building again (Build game, below; or click here).'
         except Exception:
             pass
         self.code_line['text'] = text
@@ -616,6 +618,14 @@ class App(ttk.Frame):
             self.code_line.pack(fill='x', after=self.winfo_children()[0])
         else:
             self.code_line.pack_forget()
+
+    def build_game(self):
+        """Longshot built again (code patches and code mods go in then); unsaved changes are saved first."""
+        import code_mods_ui
+        if self.dirty and messagebox.askyesno('Build the game', 'Save your mod changes first, so the build uses '
+                                              'them?', parent=self) and not self.save():
+            return
+        code_mods_ui.build_game(self, GAME, on_done=lambda _ok: self.after_code_change())
 
     def code_mods(self):
         import code_mods_ui

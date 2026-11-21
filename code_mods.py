@@ -353,17 +353,80 @@ def uninstall(family, log=lambda _s: None):
 
 # ---------------------------------------------------------------------------------------------------------- status
 def _built_at(root):
-    """When the launcher last built the version these sources are, None when unknown."""
+    """When the launcher (or the toolbox's Build the game) last built the version these sources are, None when
+    unknown."""
     try:
         builds = json.loads((LAUNCHER_DATA / 'builds.json').read_text(encoding='utf-8-sig')).get('builds', [])
     except (OSError, ValueError):
-        return None
+        builds = []
     version = root_version(root)
     times = [b.get('updated') for b in builds if b.get('version') == version and b.get('updated')]
     try:
-        return max(datetime.fromisoformat(t) for t in times) if times else None
+        times.append(json.loads(STATE.read_text(encoding='utf-8')).get('built:' + version))
+    except (OSError, ValueError):
+        pass
+    try:
+        return max(datetime.fromisoformat(t) for t in times if t) if any(times) else None
     except ValueError:
         return None
+
+
+# ------------------------------------------------------------------------- building the game (the launcher's builder)
+def _launcher_settings():
+    try:
+        return json.loads((LAUNCHER_DATA / 'settings.json').read_text(encoding='utf-8-sig'))
+    except (OSError, ValueError):
+        return {}
+
+
+def _launcher_build(game):
+    """The launcher's record of a build folder (its game file, DLSS...), {} when it has none."""
+    try:
+        builds = json.loads((LAUNCHER_DATA / 'builds.json').read_text(encoding='utf-8-sig')).get('builds', [])
+    except (OSError, ValueError):
+        return {}
+    key = os.path.normcase(os.path.abspath(str(game)))
+    return next((b for b in builds if os.path.normcase(os.path.abspath(b.get('folder') or '')) == key), {})
+
+
+def build_command(game):
+    """The command the Longshot Launcher builds a game folder with (its builder from the toolchain of the game's
+    version, the player's game file, DLSS / XeSS as chosen in the launcher). CodeModError saying what is missing."""
+    game = Path(game)
+    version = nxsave.longshot_version(game)
+    if not version:
+        raise CodeModError(f'{game} has no longshot_version.txt: not a Longshot build.')
+    tools = LAUNCHER_DATA / 'toolchains' / version
+    exe = next((p for p in (tools / 'LongshotBuilder' / 'LongshotBuilder.exe', tools / 'LongshotBuilder.exe')
+                if p.is_file()), None)
+    if exe is None:
+        raise CodeModError(f'The Longshot tools for {version} are not on this PC ({tools}). Build it once in the '
+                           'Longshot Launcher.')
+    entry, settings = _launcher_build(game), _launcher_settings()
+    src = next((p for p in (entry.get('nup'), settings.get('nup'), entry.get('romfs'), settings.get('romfs'))
+                if p and Path(p).exists()), None)
+    if not src:
+        raise CodeModError('The game file the Longshot Launcher builds from (your .nup) was not found. Check it in the '
+                           'launcher.')
+    work = settings.get('work') or str(LAUNCHER_DATA / 'work')
+    cmd = [str(exe), '--cli', '--prepare', f'--game={src}', '--out', str(game), '--work', work]
+    if entry.get('dlss', settings.get('dlss')) and settings.get('dlssLicense'):
+        cmd += ['--fetch-ngx-sdk', '--accept-nvidia-license']     # (the launcher's DLSS choice, its licence accepted there)
+    if entry.get('xess', settings.get('xess')) and settings.get('xessLicense'):
+        cmd += ['--fetch-xess-runtime', '--accept-intel-license']
+    return cmd
+
+
+def mark_built(game):
+    """A build made from the toolbox counts like the launcher's (so "Build needed" goes away)."""
+    version = nxsave.longshot_version(game)
+    try:
+        state = json.loads(STATE.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        state = {}
+    state['built:' + version] = datetime.now(timezone.utc).isoformat()
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(json.dumps(state, indent=1), encoding='utf-8')
 
 
 def status():

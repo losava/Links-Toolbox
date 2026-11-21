@@ -51,11 +51,8 @@ def run(parent, text, work, title="Link's Tool Box", delay_ms=250):
         bar.pack(fill='x', pady=(12, 4))
         bar.start(12)
         ttk.Label(frm, text='Please wait...', foreground=theme.MUTED).pack(anchor='w')
-        w.update_idletasks()
+        theme.center(w, top)
         try:
-            x = top.winfo_rootx() + max(0, (top.winfo_width() - w.winfo_width()) // 2)
-            y = top.winfo_rooty() + max(0, (top.winfo_height() - w.winfo_height()) // 3)
-            w.geometry(f'+{x}+{y}')
             w.grab_set()
         except tk.TclError:
             pass

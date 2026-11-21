@@ -776,8 +776,7 @@ class Toolbox:
             win.destroy()
         ttk.Button(bar, text='Cancel', command=win.destroy).pack(side='right')
         ttk.Button(bar, text='Share the saves', command=ok).pack(side='right', padx=(0, 8))
-        win.update_idletasks()
-        win.geometry(f'+{self.root.winfo_rootx() + 120}+{self.root.winfo_rooty() + 80}')
+        theme.center(win, self.root)
         win.grab_set()
         self.root.wait_window(win)
         if 'i' not in answer:

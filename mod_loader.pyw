@@ -303,6 +303,7 @@ def pick_one(parent, title, labels, items):
     ttk.Button(row, text='Cancel', command=win.destroy).pack(side='right')
     ttk.Button(row, text='OK', command=ok).pack(side='right', padx=(0, 6))
     box.bind('<Double-1>', ok)
+    theme.center(win, parent)
     win.grab_set()
     parent.wait_window(win)
     return items[out['i']] if 'i' in out else None

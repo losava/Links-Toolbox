@@ -61,6 +61,7 @@ class CodeMods(tk.Toplevel):
             icons.apply(self)
         except Exception:
             pass
+        theme.center(self, parent)
 
     # -- the list
     def refresh(self):

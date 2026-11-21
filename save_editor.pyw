@@ -204,8 +204,7 @@ class EditDialog(tk.Toplevel):
         ttk.Button(btn, text='Cancel', command=self.destroy).pack(side='right')
         ttk.Button(btn, text='OK', command=self.ok).pack(side='right', padx=(0, 8))
         self.bind('<Escape>', lambda _e: self.destroy())
-        self.update_idletasks()
-        self.geometry(f'+{app.winfo_rootx() + 80}+{app.winfo_rooty() + 80}')
+        theme.center(self, app)
         self.grab_set()
         self.wait_window()
 
@@ -717,6 +716,7 @@ class App(ttk.Frame):
         for w in (win, lab):
             w.bind('<Button-1>', lambda _e: win.destroy())
             w.bind('<Escape>', lambda _e: win.destroy())
+        theme.center(win, self)
         win.focus_set()
 
     def kind(self):
@@ -1400,8 +1400,7 @@ class App(ttk.Frame):
             self.save_to(targets, n)
         ttk.Button(bar, text='Save', command=go).pack(side='right', padx=(0, 8))
         win.bind('<Escape>', lambda _e: win.destroy())
-        win.update_idletasks()
-        win.geometry(f'+{self.winfo_rootx() + 120}+{self.winfo_rooty() + 100}')
+        theme.center(win, self)
         win.grab_set()
 
     def save_to(self, targets, n):

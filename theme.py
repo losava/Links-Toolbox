@@ -141,6 +141,32 @@ def dark_title_bar(win):
         pass
 
 
+def center(win, over=None):
+    """Puts a window in the middle of the window it belongs to (over, else its parent's), kept on the screen."""
+    try:
+        win.update_idletasks()
+        top = (over or win.master).winfo_toplevel()
+        w, h = max(win.winfo_width(), win.winfo_reqwidth()), max(win.winfo_height(), win.winfo_reqheight())
+        x = top.winfo_rootx() + (top.winfo_width() - w) // 2
+        y = top.winfo_rooty() + (top.winfo_height() - h) // 2
+        x = min(max(0, x), max(0, win.winfo_screenwidth() - w))
+        y = min(max(0, y), max(0, win.winfo_screenheight() - h))
+        win.geometry(f'+{x}+{y}')
+        win._centered = True
+    except (tk.TclError, AttributeError):
+        pass
+
+
+def _mapped(e):
+    """Every new window: a dark title bar, and centered on the window it belongs to (when it did not do it itself)."""
+    w = e.widget
+    if not isinstance(w, tk.Toplevel):
+        return
+    dark_title_bar(w)
+    if not getattr(w, '_centered', False) and w.master is not None:
+        center(w)
+
+
 def apply(root, reload=True):
     if reload:
         load()
@@ -202,5 +228,4 @@ def apply(root, reload=True):
         root.option_add(pattern, value)
     s.configure('Swatch.TLabel', relief='solid', borderwidth=1, width=4)
     dark_title_bar(root)
-    root.bind_class('Toplevel', '<Map>', lambda e: dark_title_bar(e.widget) if isinstance(e.widget, tk.Toplevel)
-                    else None, add='+')
+    root.bind_class('Toplevel', '<Map>', _mapped, add='+')

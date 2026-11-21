@@ -312,8 +312,6 @@ class App(ttk.Frame):
 
         bottom = ttk.Frame(self, padding=(10, 6, 10, 10))
         bottom.pack(side='bottom', fill='x')
-        self.status = ttk.Label(bottom, text='', anchor='w')
-        self.status.pack(side='left', fill='x', expand=True)
         self.play_btn = ttk.Button(bottom, text='Save and play', command=self.save_and_play)
         self.play_btn.pack(side='right')
         self.save_btn = ttk.Button(bottom, text='Save', command=self.save, state='disabled')
@@ -323,6 +321,9 @@ class App(ttk.Frame):
                         command=self.toggle_ignore_running).pack(side='right', padx=(0, 12))
         self.revert_btn = ttk.Button(bottom, text='Undo all edits', command=self.revert, state='disabled')
         self.revert_btn.pack(side='right', padx=(0, 8))
+        # (packed last: a long status line wraps in the room the buttons leave, never pushing them off the window)
+        self.status = theme.wrapping_label(bottom)
+        self.status.pack(side='left', fill='x', expand=True)
         ttk.Button(bottom, text='Backups folder', command=self.open_backups).pack(side='right', padx=(0, 8))
 
         self.book = ttk.Notebook(self)

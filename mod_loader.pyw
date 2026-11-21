@@ -543,14 +543,15 @@ class App(ttk.Frame):
         self.note.pack(fill='x')
         bottom = ttk.Frame(self, padding=10)
         bottom.pack(fill='x')
-        self.status = ttk.Label(bottom, text='')
-        self.status.pack(side='left', fill='x', expand=True)
+        # (the buttons first: a long status line wraps in the room left, never pushing them off the window)
         self.play_btn = ttk.Button(bottom, text='Save and play', command=self.play)
         self.play_btn.pack(side='right')
         self.save_btn = ttk.Button(bottom, text='Save', command=self.save)
         self.save_btn.pack(side='right', padx=(0, 6))
         ttk.Checkbutton(bottom, text='Save while the game runs', variable=nxsave.ignore_running_var(self),
                         command=self.toggle_ignore_running).pack(side='right', padx=(0, 12))
+        self.status = theme.wrapping_label(bottom)
+        self.status.pack(side='left', fill='x', expand=True)
         self.reload()
 
     # -- which game's mods

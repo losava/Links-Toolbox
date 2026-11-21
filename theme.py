@@ -142,19 +142,86 @@ def dark_title_bar(win):
 
 
 def center(win, over=None):
-    """Puts a window in the middle of the window it belongs to (over, else its parent's), kept on the screen."""
+    """Puts a window in the middle of the window it belongs to (over, else its parent's; the screen's while that one
+    is not showing), kept on the screen."""
     try:
         win.update_idletasks()
         top = (over or win.master).winfo_toplevel()
         w, h = max(win.winfo_width(), win.winfo_reqwidth()), max(win.winfo_height(), win.winfo_reqheight())
-        x = top.winfo_rootx() + (top.winfo_width() - w) // 2
-        y = top.winfo_rooty() + (top.winfo_height() - h) // 2
+        if top.winfo_viewable():
+            x = top.winfo_rootx() + (top.winfo_width() - w) // 2
+            y = top.winfo_rooty() + (top.winfo_height() - h) // 2
+        else:
+            x, y = (win.winfo_screenwidth() - w) // 2, (win.winfo_screenheight() - h) // 2
         x = min(max(0, x), max(0, win.winfo_screenwidth() - w))
         y = min(max(0, y), max(0, win.winfo_screenheight() - h))
         win.geometry(f'+{x}+{y}')
         win._centered = True
     except (tk.TclError, AttributeError):
         pass
+
+
+def wrapping_label(parent, **kw):
+    """A label whose text wraps to the room it has (a long status line takes two lines instead of pushing the
+    buttons beside it off the window)."""
+    lab = ttk.Label(parent, text='', anchor='w', justify='left', **kw)
+    lab.bind('<Configure>', lambda e: lab.configure(wraplength=max(80, e.width - 4)))
+    return lab
+
+
+# -- message boxes in the toolbox's own look, centred on it (Windows places its own boxes where it likes)
+def _box(buttons, default, cancel, title, message, parent=None, **_kw):
+    """buttons: [(text, value)]; Enter: default, Esc / closing: cancel."""
+    root = tk._default_root
+    parent = parent or root
+    if parent is None:
+        return cancel
+    win = tk.Toplevel(parent)
+    win.title(title or 'Link\'s Tool Box')
+    win.resizable(False, False)
+    if parent.winfo_toplevel().winfo_viewable():
+        win.transient(parent.winfo_toplevel())
+    frm = ttk.Frame(win, padding=(18, 14))
+    frm.pack(fill='both', expand=True)
+    ttk.Label(frm, text=message or '', wraplength=480, justify='left').pack(anchor='w')
+    out = {'v': cancel}
+    row = ttk.Frame(frm)
+    row.pack(fill='x', pady=(14, 0))
+    first = None
+    for text, value in reversed(buttons):
+        b = ttk.Button(row, text=text, command=lambda v=value: (out.update(v=v), win.destroy()))
+        b.pack(side='right', padx=(6, 0))
+        if value == default:
+            first = b
+    win.bind('<Return>', lambda _e: (out.update(v=default), win.destroy()))
+    win.bind('<Escape>', lambda _e: win.destroy())
+    win.protocol('WM_DELETE_WINDOW', win.destroy)
+    center(win, parent)
+    win.lift()
+    (first or win).focus_set()
+    try:
+        win.grab_set()
+    except tk.TclError:
+        pass
+    win.wait_window()
+    return out['v']
+
+
+def install_message_boxes():
+    """Every tkinter.messagebox call in the toolbox shows the toolbox's own box (same answers as before)."""
+    from tkinter import messagebox as mb
+    ok = [('OK', 'ok')]
+    mb.showinfo = lambda title=None, message=None, **kw: _box(ok, 'ok', 'ok', title, message, **kw)
+    mb.showwarning = lambda title=None, message=None, **kw: _box(ok, 'ok', 'ok', title, message, **kw)
+    mb.showerror = lambda title=None, message=None, **kw: _box(ok, 'ok', 'ok', title, message, **kw)
+    mb.askyesno = lambda title=None, message=None, **kw: _box([('Yes', True), ('No', False)], True, False, title,
+                                                              message, **kw)
+    mb.askyesnocancel = lambda title=None, message=None, **kw: _box(
+        [('Yes', True), ('No', False), ('Cancel', None)], True, None, title, message, **kw)
+    mb.askokcancel = lambda title=None, message=None, **kw: _box([('OK', True), ('Cancel', False)], True, False,
+                                                                 title, message, **kw)
+    mb.askretrycancel = lambda title=None, message=None, **kw: _box([('Retry', True), ('Cancel', False)], True, False,
+                                                                    title, message, **kw)
 
 
 def _mapped(e):
@@ -229,3 +296,4 @@ def apply(root, reload=True):
     s.configure('Swatch.TLabel', relief='solid', borderwidth=1, width=4)
     dark_title_bar(root)
     root.bind_class('Toplevel', '<Map>', _mapped, add='+')
+    install_message_boxes()

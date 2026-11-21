@@ -73,7 +73,7 @@ except ImportError:
     except ImportError:
         zstd = _NoZstd()
 
-VERSION = '1.6.0'        # Link's Tool Box version (the updater compares it with the newest GitHub release)
+VERSION = '1.6.1'        # Link's Tool Box version (the updater compares it with the newest GitHub release)
 APP_NAME = "Link's Tool Box"      # the app's name as shown everywhere (file and folder names stay "Link Toolbox":
                                   # the updaters already out there look for those)
 HERE = Path(__file__).resolve().parent

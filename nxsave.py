@@ -578,7 +578,11 @@ def remove_link(link):
 
 
 def version_key(version, build=None, exe_name='longshot.exe'):
-    """Sortable: v3.0.0 > v3.0.0-rc.5 > v3.0.0-rc.4; no version: the date of the build's program."""
+    """Sortable: v3.0.0 > v3.0.0-rc.5 > v3.0.0-rc.4; nightly-632 > nightly-629 (compare nightlies only with nightlies:
+    same_kind); no version: the date of the build's program."""
+    n = re.match(r'nightly-(\d+)', version or '')
+    if n:
+        return (0, 0, 0, 0, int(n.group(1)), 0)
     m = re.match(r'v?(\d+)\.(\d+)\.(\d+)(?:[-.]?rc\.?(\d+))?', version or '')
     if not m:
         exe = program(build, exe_name or 'longshot.exe') if build else None

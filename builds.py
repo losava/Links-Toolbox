@@ -39,14 +39,17 @@ def all_builds():
 
 
 # ------------------------------------------------------------------------------------------------- new builds
-def newer_build():
+def newer_build(ignore_skipped=False):
     """(app, version, folder, current folder) when a newer build of the app in use is found, else None."""
     game = nxsave.game_dir()
     app = nxsave.app_of(game)
     if app not in dict(nxsave.APPS):
         return None
     exe = dict(nxsave.APPS)[app]
-    found = nxsave.builds_of(app)
+    # (a nightly is only compared with nightlies, a release with releases: their numbers don't line up)
+    kind = lambda v: (v or '').startswith('nightly-')
+    mine = kind(nxsave.build_version(game, app))
+    found = [(v, d) for v, d in nxsave.builds_of(app) if kind(v) == mine]
     if not found:
         return None
     version, newest = found[0]
@@ -54,7 +57,7 @@ def newer_build():
         return None
     if nxsave.version_key(version, newest, exe) <= nxsave.version_key(nxsave.build_version(game, app), game, exe):
         return None
-    if nxsave.load_settings().get('build_skipped') == str(newest):
+    if not ignore_skipped and nxsave.load_settings().get('build_skipped') == str(newest):
         return None                      # (said "not now" to this one already)
     return app, version, newest, game
 
@@ -97,9 +100,10 @@ def plain(name):
     return re.sub(r'^(?:[-_]+)?(?:\d+-)?', '', name) or name
 
 
-def check(parent):
-    """At start: links new builds to the shared mods folder (when it is on), and offers (or, when set to, does) the
-    move to a newer build of the app in use. True when the toolbox switched."""
+def check(parent, offer=True, ask=False):
+    """Links new builds to the shared mods and saves folders (when sharing is on); with offer, also offers (or, when
+    set to, does) the move to a newer build of the app in use: at the first start, and from the Folders tab's Find
+    games (ask: always asks, even with "bring my mods without asking"). True when the toolbox switched."""
     if nxsave.shared_folder():
         if parent is not None:
             import busy
@@ -111,13 +115,13 @@ def check(parent):
             ensure_save_links()           # (a new build's user folder: linked to the shared saves too)
         except OSError:
             pass
-    found = newer_build()
+    found = newer_build(ignore_skipped=ask) if offer else None
     if not found:
         return False
     app, version, newest, current = found
     shared = nxsave.shared_folder()
     mods = [] if shared else [p for p in mod_folders(Path(current) / 'mods') if not p.name.startswith('~')]
-    auto = nxsave.load_settings().get('carry_mods') is True
+    auto = nxsave.load_settings().get('carry_mods') is True and not ask
     if not auto:
         what = (f'Your mods are in the shared mods folder, so the new build has them already.' if shared else
                 f'Copy your {len(mods)} mod{"s" if len(mods) != 1 else ""} from the build you use now '

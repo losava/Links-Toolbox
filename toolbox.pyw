@@ -167,6 +167,7 @@ class Toolbox:
         box.bind('<<ComboboxSelected>>', lambda _e: self.pick_found(box.current()))
         self.forget_btn = ttk.Button(tab, text='Forget', command=self.forget_found, state='disabled')
         self.forget_btn.grid(row=0, column=3, padx=(6, 0))
+        ttk.Button(tab, text='Find games', command=self.find_games).grid(row=0, column=4, padx=(6, 0))
         self.fill_found()
         now = os.path.normcase(str(self.game_at_start.resolve())) if self.game_at_start.exists() else ''
         self.app_at_start = nxsave.app_of(self.game_at_start)
@@ -847,6 +848,28 @@ class Toolbox:
             self.saves.load_file_list()
         self.folders_status['text'] = f'Forgotten: {path}'
 
+    def find_games(self):
+        """Looks for games again: Games found refreshed, new builds linked to the shared folders, a newer build of the
+        game in use offered (the start-up does this only the first time)."""
+        import builds
+        before = len(self.found)
+        try:
+            switched = builds.check(self.root, offer=True, ask=True)
+        except Exception as err:
+            messagebox.showerror('Find games', f'Looking for games failed:\n{err}', parent=self.root)
+            return
+        self.fill_found()
+        self.show_shared()
+        if switched:
+            if messagebox.askyesno('Find games', 'The toolbox needs to open again to use the new build. Open it again '
+                                   'now?', parent=self.root):
+                self.reopen()
+            return
+        n = len(self.found)
+        self.folders_status['text'] = (f'Found {n} game folder{"s" if n != 1 else ""}' +
+                                       (f' ({n - before} new)' if n > before else '') + '. Pick one in Games found to '
+                                       'use it.')
+
     def forget_found(self):
         i = self.found_box.current()
         if i < 0:
@@ -1001,10 +1024,13 @@ def main():
             root.destroy()
             return
         root.deiconify()
-    if '--selftest' not in sys.argv:  # a newer Longshot build: bring the mods along and switch (asks first)
-        try:
+    if '--selftest' not in sys.argv:  # new builds use the shared mods and saves; a newer build is offered at the
+        try:                          # first start only (then from the Folders tab's Find games)
             import builds
-            builds.check(root)
+            first = not nxsave.load_settings().get('builds_found')
+            builds.check(root, offer=first)
+            if first:
+                nxsave.save_settings({**nxsave.load_settings(), 'builds_found': True})
         except Exception:
             pass
     load_tools()

@@ -35,14 +35,16 @@ The first time, it also makes a **Link's Tool Box** shortcut with the toolbox's 
 
 The zip comes with six mods in its `mods` folder. Install them from the **Mods** tab: click **Add mods...**, answer Yes, then press **Save**.
 
-| Mod | What it does |
-|---|---|
-| Young Link Mirror Shield | Young Link holds the Mirror Shield in his hand |
-| Young Link Hylian Shield | Young Link holds the Hylian Shield in his hand, like the Deku Shield |
-| Young Link All Items | Young Link can pick the adult's items in the menu (big swords, Mirror Shield, hookshot...) |
-| Biggoron One-Handed | The Biggoron Sword swung with one hand |
-| Young Link Adult Motions | Young Link gets the adult's motions for the big swords, hookshot, bow and hammer |
-| Young Link Two-Handed Swords *(comes switched off)* | The Biggoron Sword swung with both hands, as the adult does. Needs Young Link Adult Motions. |
+| Mod | What it does | Picture |
+|---|---|---|
+| Young Link Mirror Shield | Young Link holds the Mirror Shield in his hand | <img src="docs/mod-mirror-shield.png" width="240" alt="Young Link with the Mirror Shield"> |
+| Young Link Hylian Shield | Young Link holds the Hylian Shield in his hand, like the Deku Shield | <img src="docs/mod-hylian-shield.png" width="240" alt="Young Link with the Hylian Shield"> |
+| Young Link All Items | Young Link can pick the adult's items in the menu (big swords, Mirror Shield, hookshot...) | <img src="docs/mod-all-items.png" width="240" alt="Young Link with the Megaton Hammer"> |
+| Biggoron One-Handed | The Biggoron Sword swung with one hand | <img src="docs/mod-biggoron-one-handed.png" width="240" alt="Young Link with the Biggoron Sword in one hand"> |
+| Young Link Adult Motions | Young Link gets the adult's motions for the big swords, hookshot, bow and hammer | |
+| Young Link Two-Handed Swords *(comes switched off)* | The Biggoron Sword swung with both hands, as the adult does. Needs Young Link Adult Motions. | <img src="docs/mod-two-handed-swords.png" width="240" alt="Young Link holding the Biggoron Sword with both hands"> |
+
+*The pictures show young Link wearing PlayableMalonCostumes, a separate mod by another author that is not included.*
 
 **Biggoron One-Handed** and **Young Link Two-Handed Swords** change the same file, so only one can be on. One-Handed comes switched on. To swing it with two hands, switch One-Handed off and Two-Handed on in the Mods tab, then press **Save**.
 

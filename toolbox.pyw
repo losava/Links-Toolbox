@@ -462,6 +462,11 @@ class Toolbox:
         self.look_status = ttk.Label(bar, text='Changes show at once. A few hint texts take the new colours when '
                                                'the toolbox opens again.', foreground=theme.MUTED)
         self.look_status.pack(side='left', padx=(14, 0))
+        self.close_on_play = tk.BooleanVar(value=nxsave.load_settings().get('close_on_play') is True)
+        ttk.Checkbutton(tab, text='Close Link\'s Tool Box when Save and play starts the game', variable=self.close_on_play,
+                        command=lambda: nxsave.save_settings({**nxsave.load_settings(),
+                                                              'close_on_play': self.close_on_play.get()})).pack(
+            anchor='w', pady=(14, 0))
         return tab
 
     # -- the icon: drawn ones or a square of a save slot's picture; shortcuts that show it
@@ -990,9 +995,13 @@ class Toolbox:
         self.set_title(which, self.titles.get(which, ''))
 
     def after_play(self):
-        """The game is starting: the toolbox goes, unless the save editor has edits not saved."""
-        if self.saves.may_close():
-            self.root.destroy()
+        """The game is starting: the toolbox stays open, unless the Look tab says to close it (and the save editor has
+        no edits not saved)."""
+        if nxsave.load_settings().get('close_on_play') is True:
+            if self.saves.may_close():
+                self.root.destroy()
+            return
+        self.mods.status['text'] += '   -   the game is starting'
 
     def close(self):
         if self.mods.may_close() and self.saves.may_close():

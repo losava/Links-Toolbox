@@ -1,5 +1,6 @@
 """The Code mods window (Mods tab > Code mods...): code mods put into Longshot's sources (code_mods.py), and the Build
 they need afterwards (the Longshot Launcher's Build button)."""
+import os
 import subprocess
 import tkinter as tk
 from pathlib import Path
@@ -162,6 +163,20 @@ class CodeMods(tk.Toplevel):
 
 
 # ------------------------------------------------------------------------------- Build the game (the launcher's builder)
+def build_progress(lines):
+    """(percent, step) from the builder's newest progress line ("progress 0.420 Translating..."), (None, '') when it
+    has sent none."""
+    for text in reversed(lines[-50:]):
+        parts = text.split(None, 2)
+        if len(parts) >= 2 and parts[0] == 'progress':
+            try:
+                f = float(parts[1])
+            except ValueError:
+                continue
+            return max(0.0, min(100.0, f * 100)), (parts[2] if len(parts) > 2 else '')
+    return None, ''
+
+
 def build_game(parent, game=None, on_done=lambda ok: None):
     """Builds the game folder again with the launcher's own builder (code patches and code mods go in at a build), in
     a window that shows how far it is. Asks first; refuses while the game runs."""
@@ -210,10 +225,11 @@ def build_game(parent, game=None, on_done=lambda ok: None):
     def job():
         try:
             log_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(log_path, 'w', encoding='utf-8', errors='replace') as log:
+            with open(log_path, 'w', encoding='utf-8', errors='replace', buffering=1) as log:
+                env = dict(os.environ, PYTHONUNBUFFERED='1')     # (its Python steps: lines as they happen)
                 p = subprocess.Popen(cmd, cwd=str(Path(cmd[0]).parent), stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace',
-                                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                                     env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
                 for text in p.stdout:
                     log.write(text)
                     if text.strip():
@@ -227,7 +243,17 @@ def build_game(parent, game=None, on_done=lambda ok: None):
         if not win.winfo_exists():
             return
         if lines:
-            line['text'] = lines[-1][:300]
+            # the builder's own progress ("progress 0.420 Translating the game to PC code"): a real bar and a percent
+            pct, step = build_progress(lines)
+            if pct is not None:
+                if str(bar['mode']) != 'determinate':
+                    bar.stop()
+                    bar.configure(mode='determinate', maximum=100)
+                bar['value'] = pct
+                head['text'] = f'Building Longshot {version}...  {pct:.0f}%'
+                line['text'] = step
+            else:
+                line['text'] = lines[-1][:300]
         if 'code' not in state:
             win.after(400, poll)
             return

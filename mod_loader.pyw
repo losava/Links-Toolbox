@@ -90,6 +90,68 @@ def patches_used(folder):
     return PATCHES and patch_only(folder)
 
 
+def _fnv32(data):
+    """Longshot's checksum of a patch file (exefs_patches.txt)."""
+    h = 0x811C9DC5
+    for b in data:
+        h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
+    return '%08x' % h
+
+
+def build_reasons(mods, game=None):
+    """Why the game must be built again before playing, [] when Save and play is enough: code mods changed since the
+    last build, or the code patches of the mods that are on (by the folder names Save gives them, as Longshot matches
+    them) are not exactly the ones its last build put in (exefs_patches.txt), new or changed or switched off."""
+    game = Path(game or GAME)
+    if not nxsave.is_longshot(game):
+        return []
+    reasons = []
+    try:
+        import code_mods
+        version = nxsave.longshot_version(game)
+        if any(n for _r, v, n, _m in code_mods.status()['roots'] if v == version):
+            reasons.append('Code mods changed since the game was last built.')
+    except Exception:
+        pass
+    if not nxsave.applies_patches(game):
+        return reasons
+    built = {}
+    try:
+        for line in (game / 'exefs_patches.txt').read_text(encoding='utf-8', errors='replace').splitlines():
+            parts = line.split('\t')
+            if len(parts) >= 4 and not line.startswith('#'):
+                built[(parts[0], parts[1])] = (parts[2], parts[3])
+    except OSError:
+        pass
+    on = [m for m in mods if m.on and m.loads]
+    wanted, moved = set(), set()
+    for m in on:
+        if not m.patches:
+            continue
+        name = m.target(on.index(m) + 1)
+        d = MODS / m.folder / 'exefs'
+        for f in sorted(d.iterdir()) if d.is_dir() else []:
+            if f.is_file() and f.suffix.lower() in ('.ips', '.pchtxt'):
+                wanted.add((name, f.name))
+                h = _fnv32(f.read_bytes())
+                have = built.get((name, f.name))
+                if have is not None and have[0] == h:
+                    continue
+                # (the same patch built in under the mod's old folder name: it only moved in the list)
+                old = next((k for k, (bh, _kd) in built.items() if k[1] == f.name and bh == h and plain(k[0]) == m.name),
+                           None)
+                if old:
+                    moved.add(old)
+                    reasons.append(f'{m.name}: moved in the list, so its folder is renamed, and Longshot finds code '
+                                   'patches by folder name.')
+                else:
+                    reasons.append(f'{m.name}: its code patch ({f.name}) is not in the game yet.')
+    for (mod, file), (_h, kind) in built.items():
+        if kind in ('code', 'data') and (mod, file) not in wanted and (mod, file) not in moved:
+            reasons.append(f'{plain(mod)}: its code patch ({file}) is still in the game, but the mod is off or gone.')
+    return reasons
+
+
 def code_only(src, depth=4):
     """The folders in src (up to depth down) that are a mod with only an exefs part: nothing the PC ports can load
     (code patches are, on a Longshot build that applies them: find_mod_folders has those)."""
@@ -550,8 +612,14 @@ class App(ttk.Frame):
         self.save_btn.pack(side='right', padx=(0, 6))
         ttk.Checkbutton(bottom, text='Save while the game runs', variable=nxsave.ignore_running_var(self),
                         command=self.toggle_ignore_running).pack(side='right', padx=(0, 12))
+        self.build_btn = None
         if nxsave.is_longshot(GAME):      # (code patches and code mods go in when Longshot builds the game)
-            ttk.Button(bottom, text='Build game', command=self.build_game).pack(side='right', padx=(0, 12))
+            self.build_btn = ttk.Button(bottom, text='Build game', command=self.build_game)
+            self.build_btn.pack(side='right', padx=(0, 12))
+        # (only one of Build game / Save and play is the right next step; the other is greyed out and says why)
+        for b in filter(None, (self.play_btn, self.build_btn)):
+            b.bind('<Double-1>', lambda _e, b=b: self.why_greyed(b))
+            b.bind('<Button-1>', lambda _e, b=b: self.why_greyed(b) if b.instate(['disabled']) else None, add='+')
         self.status = theme.wrapping_label(bottom)
         self.status.pack(side='left', fill='x', expand=True)
         self.reload()
@@ -636,7 +704,7 @@ class App(ttk.Frame):
         """A code mod's game files go into the mods folder: the list shows them (unless edits are not saved yet)."""
         if not self.dirty:
             self.mods = scan()
-            self.fill()
+        self.fill()                       # (also: Build game / Save and play follow what the game now needs)
         self.show_code_line()
 
     def fill(self, keep=None):
@@ -685,12 +753,35 @@ class App(ttk.Frame):
             text += f'   -   {", ".join(busy)} is running: close it before saving (or tick Save while the game runs)'
         elif nxsave.ignore_running() and nxsave.game_running():
             text += f'   -   {nxsave.game_running()} is running: changed mods are used from its next start'
-        self.status['text'] = text
         state = 'disabled' if busy else 'normal'
         self.save_btn['state'] = state
         self.play_btn['state'] = state
+        self.build_why = build_reasons(self.mods) if self.build_btn else []
+        if self.build_btn:
+            # the right next step only: Build game when the game needs building first, else Save and play
+            self.build_btn['state'] = 'normal' if self.build_why and not busy else 'disabled'
+            if self.build_why:
+                self.play_btn['state'] = 'disabled'
+                text += '   -   the game needs building first: press Build game'
+        self.status['text'] = text
         self.on_title(('* ' if self.dirty else '') + 'Mod loader')
         self.show_note()
+
+    def why_greyed(self, button):
+        """A click on the greyed-out one of Build game / Save and play: why, and which one to use."""
+        if not button.instate(['disabled']):
+            return
+        busy = running()
+        if busy:
+            why = f'{", ".join(busy)} is running: close it first (or tick Save while the game runs).'
+        elif button is self.play_btn:
+            why = ('The game needs building first, so Save and play would start it without these changes:\n\n' +
+                   '\n'.join('  - ' + r for r in self.build_why) +
+                   '\n\nPress Build game: it saves your mods and builds the game. Then play.')
+        else:
+            why = ('Nothing needs building: no code patch or code mod changed since the game was last built. Mods '
+                   'that only replace game files are used straight away, so Save and play is enough.')
+        messagebox.showinfo('Mod loader', why, parent=self)
 
     def selected(self):
         sel = self.tree.selection()

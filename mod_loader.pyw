@@ -263,6 +263,10 @@ def gamebanana_download(f, folder, download=None):
         download = updater.download
     name = re.sub(r'[\\/:*?"<>|]', '_', Path(f['_sFile']).name).strip(' .') or 'mod.zip'
     dest = Path(folder) / name
+    n = 2
+    while dest.exists():               # (never over a file that is there already: name (2).zip, (3)...)
+        dest = Path(folder) / f'{Path(name).stem} ({n}){Path(name).suffix}'
+        n += 1
     download(f['_sDownloadUrl'], dest)
     want = (f.get('_sMd5Checksum') or '').lower()
     if want and hashlib.md5(dest.read_bytes()).hexdigest() != want:
@@ -280,6 +284,40 @@ def is_generator(src, depth=2):
         if len(Path(dirpath).relative_to(src).parts) >= depth:
             dirs[:] = []
     return False
+
+
+def download_folder():
+    """Where "From a link" keeps what it downloads: the user's Downloads folder (else the home folder)."""
+    d = Path.home() / 'Downloads'
+    return d if d.is_dir() else Path.home()
+
+
+def ask_text(parent, title, prompt, initial=''):
+    """A line of text, in the toolbox's own look (the stock dialog ignores the theme); None when closed or empty."""
+    win = tk.Toplevel(parent)
+    win.title(title)
+    win.transient(parent)
+    win.resizable(False, False)
+    frm = ttk.Frame(win, padding=(16, 14))
+    frm.pack(fill='both', expand=True)
+    ttk.Label(frm, text=prompt, wraplength=460, justify='left').pack(anchor='w')
+    var = tk.StringVar(value=initial)
+    entry = ttk.Entry(frm, textvariable=var, width=64)
+    entry.pack(fill='x', pady=(8, 12))
+    out = {}
+    row = ttk.Frame(frm)
+    row.pack(fill='x')
+    ok = lambda *_: (out.setdefault('v', var.get().strip()), win.destroy())
+    ttk.Button(row, text='Cancel', command=win.destroy).pack(side='right')
+    ttk.Button(row, text='OK', command=ok).pack(side='right', padx=(0, 6))
+    win.bind('<Return>', ok)
+    win.bind('<Escape>', lambda _e: win.destroy())
+    theme.center(win, parent)
+    entry.focus_set()
+    entry.select_range(0, 'end')
+    win.grab_set()
+    parent.wait_window(win)
+    return out.get('v') or None
 
 
 def pick_one(parent, title, labels, items):
@@ -772,14 +810,14 @@ class App(ttk.Frame):
                 'mod is for (new menu text with nothing behind it, for example).\n\nYes: add only their romfs part.'
                 '   No: skip these mods.', icon='warning', parent=self)
             if answer is None:
-                return
+                return False
             if answer:
                 romfs_only = {plain(s.name) for s in code}
             else:
                 folders = [s for s in folders if s not in code]
                 if not folders:
                     self.status['text'] += '   -   nothing added'
-                    return
+                    return False
         have = {plain(p.name).lower(): p for p in MODS.iterdir() if p.is_dir()} if MODS.is_dir() else {}
         replace = set()
         for src in folders:
@@ -798,7 +836,7 @@ class App(ttk.Frame):
             messagebox.showerror('Add mods', f'The mods could not be copied:\n{err}', parent=self)
             self.dirty = False
             self.reload()
-            return
+            return False
         self.mods = scan()
         self.dirty = bool(added or replaced)
         self.fill()
@@ -806,16 +844,17 @@ class App(ttk.Frame):
             self.status['text'] += f'   -   added {len(added) + len(replaced)}: press Save to use them'
         else:
             self.status['text'] += '   -   nothing new to add'
+        return bool(added or replaced)
 
     # -- dropped on the window (dragdrop.py): each thing dropped is sorted out
     def add_paths(self, paths):
         """Files and folders dragged in: a code mod (a package with mod.json and a "longshot" folder, in a zip or a
         folder) goes into Longshot's sources after asking; any other zip or folder with romfs mods in it is copied into
-        the mods folder like Add mods; anything else is said."""
+        the mods folder like Add mods; anything else is said. True when something was imported."""
         import code_mods
         if running():
             messagebox.showwarning('Add mods', f'Close {", ".join(running())} first.', parent=self)
-            return
+            return False
         code, normal, bad, tmps = [], [], [], []
 
         def sort_out():                    # (in the background: big zips take a while to unpack; no Tk in here)
@@ -850,13 +889,15 @@ class App(ttk.Frame):
             busy.run(self, f'Opening {names[:80]}{"..." if len(names) > 80 else ""}...', sort_out, title='Add mods')
             if bad:
                 messagebox.showinfo('Add mods', 'Not added:\n\n' + '\n'.join(bad), parent=self)
+            done = False
             for p, src in code:
-                self.add_code_mod(p, src)
+                done = self.add_code_mod(p, src) or done
             if normal:
                 if self.dirty and not messagebox.askyesno('Add mods', 'Forget the changes you have not saved?',
                                                           parent=self):
-                    return
-                self._add_folders(normal)
+                    return done
+                done = self._add_folders(normal) or done
+            return done
         finally:
             for t in tmps:
                 shutil.rmtree(t, ignore_errors=True)
@@ -864,8 +905,6 @@ class App(ttk.Frame):
     # -- a mod's page on GameBanana: its file downloaded, then added as a dropped file is
     def from_link(self):
         import busy
-        import tempfile
-        from tkinter import simpledialog
         if running():
             messagebox.showwarning('Add mods', f'Close {", ".join(running())} first.', parent=self)
             return
@@ -873,8 +912,8 @@ class App(ttk.Frame):
             clip = self.clipboard_get()
         except tk.TclError:
             clip = ''
-        url = simpledialog.askstring('From a link', 'A mod\'s page on GameBanana\n(like https://gamebanana.com/mods/742970):',
-                                     initialvalue=clip if GB_MOD.search(clip or '') else '', parent=self)
+        url = ask_text(self, 'From a link', 'A mod\'s page on GameBanana (like https://gamebanana.com/mods/742970):',
+                       clip if GB_MOD.search(clip or '') else '')
         if not url:
             return
         try:
@@ -898,18 +937,29 @@ class App(ttk.Frame):
             messagebox.showerror('From a link', f'{f["_sFile"]}: GameBanana\'s virus scan says "{f["_sAvResult"]}". '
                                  'Not downloaded.', parent=self)
             return
-        if not messagebox.askyesno('From a link', f'Download {file_label(f)}\nfrom {info["name"]} on GameBanana, and add '
-                                   'it?', parent=self):
+        folder = download_folder()
+        if not messagebox.askyesno('From a link', f'Download {file_label(f)}\nfrom {info["name"]} on GameBanana, into '
+                                   f'{folder}?', parent=self):
             return
-        tmp = Path(tempfile.mkdtemp(prefix='linktoolbox-dl-'))
         try:
-            path = busy.run(self, f'Downloading {f["_sFile"]}...', lambda: gamebanana_download(f, tmp),
+            path = busy.run(self, f'Downloading {f["_sFile"]}...', lambda: gamebanana_download(f, folder),
                             title='From a link')
-            self.add_paths([str(path)])
         except (ValueError, OSError) as err:
             messagebox.showerror('From a link', f'{f["_sFile"]} could not be downloaded:\n{err}', parent=self)
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+            return
+        # the download is kept until it is in: imported first, then (if wanted) deleted
+        if not messagebox.askyesno('From a link', f'Downloaded:\n{path}\n\nImport it now?', parent=self):
+            self.status['text'] += f'   -   downloaded {path.name} (not imported): it is in {folder}'
+            return
+        if not self.add_paths([str(path)]):
+            messagebox.showinfo('From a link', f'{path.name} was not imported, so it is kept:\n{path}', parent=self)
+            return
+        if messagebox.askyesno('From a link', f'{path.name} is imported.\n\nDelete the downloaded file?\n{path}',
+                               parent=self):
+            try:
+                path.unlink()
+            except OSError as err:
+                messagebox.showerror('From a link', f'{path.name} could not be deleted:\n{err}', parent=self)
 
     def add_code_mod(self, dropped, src):
         """A code mod dropped in: into Longshot's sources (asked first), then Build."""
@@ -918,13 +968,13 @@ class App(ttk.Frame):
         if not messagebox.askyesno('Code mods', f'{dropped.name} is a code mod: it changes how the game works, so it '
                                    'goes into Longshot\'s own sources, and then you press Build in the Longshot '
                                    'Launcher (a full build).\n\nPut it in?', parent=self):
-            return
+            return False
         try:
             names = busy.run(self, 'Putting the code mod into Longshot\'s sources...',
                              lambda: code_mods.install(src), title='Code mods')
         except (code_mods.CodeModError, OSError) as err:
             messagebox.showerror('Code mods', str(err), parent=self)
-            return
+            return False
         finally:
             self.after_code_change()
         if messagebox.askyesno('Code mods', f'Put in: {", ".join(names)}\n\nNow press Build in the Longshot Launcher. '
@@ -932,6 +982,7 @@ class App(ttk.Frame):
             exe = code_mods.launcher_exe()
             if exe:
                 subprocess.Popen([str(exe)], cwd=str(exe.parent))
+        return True
 
     # -- saving and playing
     def save(self):

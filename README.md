@@ -33,16 +33,18 @@ The first time, it also makes a **Link's Tool Box** shortcut with the toolbox's 
 
 ## Mods included
 
-The zip comes with six mods in its `mods` folder. Install them from the **Mods** tab: click **Add mods...**, answer Yes, then press **Save**.
+The zip comes with six mods in its `mods` folder. Install them from the **Mods** tab: click **Add mods...**, pick **The mods that came with the toolbox**, then press **Save**.
 
-| Mod | What it does | Picture |
-|---|---|---|
-| Young Link Mirror Shield | Young Link holds the Mirror Shield in his hand | <img src="docs/mod-mirror-shield.png" width="240" alt="Young Link with the Mirror Shield"> |
-| Young Link Hylian Shield | Young Link holds the Hylian Shield in his hand, like the Deku Shield | <img src="docs/mod-hylian-shield.png" width="240" alt="Young Link with the Hylian Shield"> |
-| Young Link All Items | Young Link can pick the adult's items in the menu (big swords, Mirror Shield, hookshot...) | <img src="docs/mod-all-items.png" width="240" alt="Young Link with the Megaton Hammer"> |
-| Biggoron One-Handed | The Biggoron Sword swung with one hand | <img src="docs/mod-biggoron-one-handed.png" width="240" alt="Young Link with the Biggoron Sword in one hand"> |
-| Young Link Adult Motions | Young Link gets the adult's motions for the big swords, hookshot, bow and hammer | |
-| Young Link Two-Handed Swords *(comes switched off)* | The Biggoron Sword swung with both hands, as the adult does. Needs Young Link Adult Motions. | <img src="docs/mod-two-handed-swords.png" width="240" alt="Young Link holding the Biggoron Sword with both hands"> |
+Each mod can also be downloaded on its own (the **Download** links below): add its zip with **Add mods...** > **A .zip file**, or drag it onto the toolbox.
+
+| Mod | What it does | Picture | Download |
+|---|---|---|---|
+| Young Link Mirror Shield | Young Link holds the Mirror Shield in his hand | <img src="docs/mod-mirror-shield.png" width="240" alt="Young Link with the Mirror Shield"> | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Young.Link.Mirror.Shield.zip) |
+| Young Link Hylian Shield | Young Link holds the Hylian Shield in his hand, like the Deku Shield | <img src="docs/mod-hylian-shield.png" width="240" alt="Young Link with the Hylian Shield"> | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Young.Link.Hylian.Shield.zip) |
+| Young Link All Items | Young Link can pick the adult's items in the menu (big swords, Mirror Shield, hookshot...) | <img src="docs/mod-all-items.png" width="240" alt="Young Link with the Megaton Hammer"> | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Young.Link.All.Items.zip) |
+| Biggoron One-Handed | The Biggoron Sword swung with one hand | <img src="docs/mod-biggoron-one-handed.png" width="240" alt="Young Link with the Biggoron Sword in one hand"> | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Biggoron.One-Handed.zip) |
+| Young Link Adult Motions | Young Link gets the adult's motions for the big swords, hookshot, bow and hammer | | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Young.Link.Adult.Motions.zip) |
+| Young Link Two-Handed Swords *(comes switched off)* | The Biggoron Sword swung with both hands, as the adult does. Needs Young Link Adult Motions. | <img src="docs/mod-two-handed-swords.png" width="240" alt="Young Link holding the Biggoron Sword with both hands"> | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Young.Link.Two-Handed.Swords.zip) |
 
 *The pictures show young Link wearing PlayableMalonCostumes, a separate mod by another author that is not included.*
 

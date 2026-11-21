@@ -78,8 +78,12 @@ def share_mods():
     leading _), taken from the game's mods folder. Nothing else, even if it is on there."""
     sys.path.insert(0, str(HERE))
     import nxsave
-    # (from the game the toolbox is set to: the main build, Longshot rc; with sharing on, the shared mods folder)
-    mods = nxsave.mods_dir_for(nxsave.game_dir())
+    # (from the game the toolbox is set to: the main build, Longshot rc; with sharing on, the shared mods folder;
+    #  --mods-from <folder>: a clean set instead, when the player's own copies were changed by other mods' files)
+    if '--mods-from' in sys.argv:
+        mods = Path(sys.argv[sys.argv.index('--mods-from') + 1])
+    else:
+        mods = nxsave.mods_dir_for(nxsave.game_dir())
     print('mods from:', mods)
     import re
     plain = lambda name: re.sub(r'^(?:[-_]+)?(?:\d+-)?', '', name)
@@ -213,10 +217,40 @@ def build_linux():
     print(f'{LINUX_OUT}  {LINUX_OUT.stat().st_size / 1e6:.1f} MB')
 
 
+MOD_ZIPS = HERE / 'share' / 'mods'
+
+
+def mod_asset(name):
+    """The release file name of one mod's own zip: 'Mod.Young.Link.Mirror.Shield.zip' (GitHub turns spaces into dots
+    anyway)."""
+    return 'Mod.' + '.'.join(name.replace('-', ' - ').split()).replace('.-.', '-') + '.zip'
+
+
+def build_mod_zips():
+    """share\\mods\\<asset>.zip: each mod of the download on its own (one folder with its plain name and romfs), to
+    download separately. The same files as the download's mods."""
+    import re
+    MOD_ZIPS.mkdir(parents=True, exist_ok=True)
+    for old in MOD_ZIPS.glob('*.zip'):
+        old.unlink()
+    for mod, as_name in share_mods():
+        plain = re.sub(r'^(?:[-_]+)?(?:\d+-)?', '', as_name)
+        out = MOD_ZIPS / mod_asset(plain)
+        with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+            for p in sorted(mod.rglob('*')):
+                if p.is_file():
+                    z.write(p, plain + '/' + p.relative_to(mod).as_posix(),
+                            compress_type=zipfile.ZIP_STORED if p.suffix == '.zs' else zipfile.ZIP_DEFLATED)
+        print(f'{out}  {out.stat().st_size / 1e6:.2f} MB')
+
+
 def main():
     global PYTHON
     if '--linux' in sys.argv:        # the Linux download instead (no Python inside: it uses the system's)
         build_linux()
+        return
+    if '--mod-zips' in sys.argv:     # each bundled mod on its own, for downloading separately
+        build_mod_zips()
         return
     if '--python' in sys.argv:       # another Python 3.14 folder (with tkinter) to put in the zip
         PYTHON = Path(sys.argv[sys.argv.index('--python') + 1])

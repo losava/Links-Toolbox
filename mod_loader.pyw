@@ -243,7 +243,39 @@ def apply(mods):
     # packs two mods share are merged, then one size table for the mods that are on (it counts the merged packs)
     import pack_merge
     pack_merge.refresh(MODS, [m.folder for m in on], log=lambda _s: None)
+    write_mods_list([m.folder for m in on])
     return [(m.name, new) for m, _t, new in temp]
+
+
+def mods_lists(game=None):
+    """The mods.json files a Longshot build reads its mods' order and switches from (its Insert menu's Mods tab: in
+    the game folder, or beside the player's settings in the user folder); [] when it has none."""
+    game = Path(game or GAME)
+    return [p for p in (game / 'mods.json', game / 'user' / 'mods.json') if p.is_file()]
+
+
+def write_mods_list(on_folders, game=None):
+    """The build's mods.json in the toolbox's order: the mods that are on, then ~Merged Packs and ~Size Table (they
+    must load last). A mod mods.json doesn't name loads after every named one, so a renamed mod (07-WindGear) went
+    after ~Merged Packs and its own files won over the merged ones. Other keys in the file are kept."""
+    import json
+    names = list(on_folders) + [f for f in ('~Merged Packs', '~Size Table') if (MODS / f).is_dir()]
+    for path in mods_lists(game):
+        try:
+            doc = json.loads(path.read_text(encoding='utf-8-sig'))
+            if not isinstance(doc, dict):
+                continue
+        except (OSError, ValueError):
+            continue
+        doc['mods'] = [{'id': f'local/{n}', 'enabled': True} for n in names]
+        lines = ['{', '  "mods": [']
+        lines += [f'    {json.dumps(e)}' + (',' if i < len(names) - 1 else '') for i, e in enumerate(doc['mods'])]
+        rest = {k: v for k, v in doc.items() if k != 'mods'}
+        lines.append('  ]' + (',' if rest else ''))
+        if rest:
+            lines.append(json.dumps(rest, indent=2)[1:-1].strip('\n'))
+        lines.append('}')
+        path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 
 # the mods that come with the shared toolbox: Link Toolbox\mods, next to its app folder

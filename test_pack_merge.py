@@ -553,6 +553,32 @@ def test_follow_animation_lists():
     print('ok animation lists follow a switched model')
 
 
+
+def test_byml_merge():
+    """Two mods changing different keys (and named rows) of one BYML file: both kept; the same key: the later wins."""
+    import byml_rw
+    S = lambda t: ('str', t)
+    row = lambda name, child: ('dict', {'__RowId': S(name), 'Child': (0xd0, child)})
+    doc = lambda comps, rows: byml_rw.write(('dict', {'Components': ('dict', comps), 'Rows': ('array', rows)}))
+    game = doc({'Model': S('Link'), 'Anim': S('Link')}, [row('Sword', 0), row('Shield', 0)])
+    costume = doc({'Model': S('Malon'), 'Anim': S('Malon')}, [row('Sword', 0), row('Shield', 0)])
+    mask = doc({'Model': S('Link'), 'Anim': S('Link'), 'AI': S('Mask')}, [row('Sword', 0), row('Shield', 0), row('Mask', 1)])
+    items = doc({'Model': S('Link'), 'Anim': S('Link')}, [row('Sword', 1), row('Shield', 1)])
+    got, clash = pack_merge.merge_byml(game, [costume, items, mask])
+    d = nxsave.byml(got)
+    assert not clash and d['Components'] == {'Model': 'Malon', 'Anim': 'Malon', 'AI': 'Mask'}, d
+    assert [(r['__RowId'], r['Child']) for r in d['Rows']] == [('Sword', True), ('Shield', True), ('Mask', True)], d
+    # the same key changed both ways: a clash, the later mod wins
+    other = doc({'Model': S('Zelda'), 'Anim': S('Link')}, [row('Sword', 0), row('Shield', 0)])
+    got, clash = pack_merge.merge_byml(game, [costume, other])
+    assert clash and nxsave.byml(got)['Components'] == {'Model': 'Zelda', 'Anim': 'Malon'}
+    # in a pack: an ActorParam both change in different keys is no member clash
+    merged, clashes = pack_merge.merge_members({'ap': game, 'x': b'x'}, [('A', {'ap': costume, 'x': b'x'}),
+                                                                       ('B', {'ap': mask, 'x': b'x'})])
+    assert clashes == [] and nxsave.byml(merged['ap'])['Components']['AI'] == 'Mask'
+    assert pack_merge.merge_byml(b'not byml', [b'x', b'y']) is None
+    print('ok BYML files merged key by key')
+
 def main():
     test_sarc_writer()
     test_merge_members()
@@ -560,6 +586,7 @@ def main():
     test_skip_remove_order()
     test_list_hides_loader_folders()
     test_follow_animation_lists()
+    test_byml_merge()
     print('all pack merge tests passed')
 
 

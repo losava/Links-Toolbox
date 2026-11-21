@@ -68,10 +68,90 @@ def _open_pack(data, dic):
     return _inspect(zstd.decompress(data, zstd_dict=dic))
 
 
+_MISSING = ('missing',)
+
+
+def _merge_tree(o, a, b):
+    """Three-way merge of BYML trees (byml_rw's nodes): o the game's, a what the merge has so far, b the next mod's.
+    A dict is merged key by key (each mod's own changes kept); anything else both changed differently: b wins.
+    (tree, clash) with clash True when some value was changed both ways."""
+    if b == o:
+        return a, False
+    if a == o or a == b:
+        return b, False
+    if a[0] == b[0] == 'dict' and (o is _MISSING or o[0] == 'dict'):
+        od = {} if o is _MISSING else o[1]
+        out, clash = {}, False
+        for k in list(a[1]) + [k for k in b[1] if k not in a[1]]:
+            v, c = _merge_tree(od.get(k, _MISSING), a[1].get(k, _MISSING), b[1].get(k, _MISSING))
+            clash = clash or c
+            if v is not _MISSING:
+                out[k] = v
+        return ('dict', out), clash
+    if a[0] == b[0] == 'array' and (o is _MISSING or o[0] == 'array'):
+        oa = [] if o is _MISSING else o[1]
+        key = _row_key(oa + a[1] + b[1])
+        if key:                            # (rows with a name: merged by name, each mod's added and changed rows kept)
+            name = lambda n: n[1][key][1]
+            od, ad, bd = ({name(n): n for n in rows} for rows in (oa, a[1], b[1]))
+            out, clash = [], False
+            for n in a[1] + [n for n in b[1] if name(n) not in ad]:
+                k = name(n)
+                v, c = _merge_tree(od.get(k, _MISSING), ad.get(k, _MISSING), bd.get(k, _MISSING))
+                clash = clash or c
+                if v is not _MISSING:
+                    out.append(v)
+            return ('array', out), clash
+        if len(oa) == len(a[1]) == len(b[1]):     # (the same length: place by place)
+            out, clash = [], False
+            for x, y, z in zip(oa, a[1], b[1]):
+                v, c = _merge_tree(x, y, z)
+                clash = clash or c
+                out.append(v)
+            return ('array', out), clash
+    return b, True
+
+
+ROW_KEYS = ('__RowId', 'BtnName', 'ActorShort', 'Name', 'ModelProjectName')
+
+
+def _row_key(rows):
+    """The field that names every row of a list (the game's tables: __RowId, BtnName, ActorShort...), None when the
+    rows are not dictionaries that all have one such field with a different text in each."""
+    if not rows or not all(n[0] == 'dict' for n in rows):
+        return None
+    for key in ROW_KEYS:
+        names = [n[1].get(key) for n in rows]
+        if all(v is not None and v[0] == 'str' for v in names):
+            return key
+    return None
+
+
+def merge_byml(original, versions):
+    """One BYML file (version 7, little-endian) as each mod changed it, merged key by key over the game's: (bytes,
+    clash), or None when one of them is not such a file (then the later one wins whole, as before)."""
+    import byml_rw
+    try:
+        o = byml_rw.read(original)
+        trees = [byml_rw.read(v) for v in versions]
+    except (ValueError, IndexError, KeyError, struct.error, UnicodeDecodeError):
+        return None
+    tree, clash = trees[0], False
+    for t in trees[1:]:
+        tree, c = _merge_tree(o, tree, t)
+        clash = clash or c
+    try:
+        return byml_rw.write(tree), clash
+    except (ValueError, KeyError, struct.error):
+        return None
+
+
 def merge_members(original, mods):
     """mods: [(label, {name: bytes}), ...] in load order, later wins. A mod adds a member the original lacks, changes
     one whose bytes differ, or removes one by leaving it out; a member it carries unchanged is left to the others.
-    Returns (merged, clashes) with clashes (member, loser, winner). Does not mutate its inputs."""
+    A BYML member two mods both changed is merged key by key (Malon's costume switching a player's model and Majora's
+    Mask giving the same player its mask AI both change the ActorParam, in different keys): only a key both changed
+    is a clash. Returns (merged, clashes) with clashes (member, loser, winner). Does not mutate its inputs."""
     result = dict(original)
     touched = {}
     for label, members in mods:
@@ -82,6 +162,14 @@ def merge_members(original, mods):
             touched.setdefault(name, []).append((label, kind, data))
     clashes = []
     for name, acts in touched.items():
+        sets = [data for _l, kind, data in acts if kind == 'set']
+        if len(acts) > 1 and len(sets) == len(acts) and name in original and len(set(sets)) > 1:
+            merged = merge_byml(original[name], sets)
+            if merged is not None:
+                result[name], clash = merged
+                if clash:
+                    clashes.extend((name, label, acts[-1][0]) for label, _k, _d in acts[:-1])
+                continue
         for _label, kind, data in acts:
             if kind == 'set':
                 result[name] = data
@@ -267,6 +355,36 @@ def _skeleton_maker(mods_dir, mod_folders, rom):
     return make
 
 
+BYML_ENDS = ('.bgyml', '.byml', '.byml.zs')     # (game data the merge combines key by key, as it does pack members)
+
+
+def _mergeable(low):
+    """A path Save merges when two mods that are on carry it: a .pack.zs, or a BYML game data file."""
+    return low.endswith('.pack.zs') or low.endswith(BYML_ENDS)
+
+
+def _zs_dict(rom, low):
+    """The dictionary the game decompresses a (non-pack) .zs file with: bcett's own for .bcett.byml.zs, else zs.zsdic."""
+    members = nxsave.sarc_members(zstd.decompress(rom.load('Pack/ZsDic.pack.zs')))
+    name = 'bcett.byml.zsdic' if low.endswith('.bcett.byml.zs') else 'zs.zsdic'
+    return zstd.ZstdDict(members[name]) if name in members else None
+
+
+def _merge_loose(rom, key, datas):
+    """A BYML game file several mods replace, merged over the game's: (bytes as the game reads them, clash) or None
+    when it can't be (no game copy, not a BYML file the writer handles)."""
+    path = next((p for p in rom.by_path if p.lower() == key), None)
+    if path is None:
+        return None
+    dic = _zs_dict(rom, key) if key.endswith('.zs') else None
+    unpack = (lambda b: zstd.decompress(b, zstd_dict=dic)) if key.endswith('.zs') else (lambda b: b)
+    merged = merge_byml(unpack(rom.load(path)), [unpack(d) for d in datas])
+    if merged is None:
+        return None
+    data, clash = merged
+    return (zstd.compress(data, level=LEVEL, zstd_dict=dic) if key.endswith('.zs') else data), clash
+
+
 def _carried(mods_dir, folders):
     """{lowercase path: [(folder, real relative path), ...]} for every .pack.zs any of the folders carries."""
     found = {}
@@ -299,7 +417,7 @@ def _shared(mods_dir, folders):
         for dirpath, _d, names in os.walk(root):
             for name in names:
                 rel = (Path(dirpath) / name).relative_to(root).as_posix()
-                if rel.lower().endswith('.pack.zs'):
+                if _mergeable(rel.lower()):
                     found.setdefault(rel.lower(), []).append((str(folder), rel))
     shared = {}
     for key, pairs in found.items():
@@ -357,6 +475,21 @@ def build(mods_dir, mod_folders, game=None, log=print, rom=None):
             if dic is None:
                 raise ValueError('the game files have no pack dictionary (Pack/ZsDic.pack.zs)')
             for key, owners in shared.items():
+                if not key.endswith('.pack.zs'):          # (a BYML game file two mods replace: merged key by key)
+                    try:
+                        datas = [(mods_dir / folder / 'romfs' / rel).read_bytes() for folder, rel in owners]
+                        got = _merge_loose(rom, key, datas)
+                    except (OSError, ValueError, KeyError, zstd.ZstdError) as err:
+                        got, why = None, str(err)
+                    rel = _canon(rom, key, owners)
+                    if got is None:
+                        continue                          # (the later mod's file wins whole, as before)
+                    blob, clash = got
+                    if clash:
+                        clashes.extend((rel, '(some values both change)', f, owners[-1][0]) for f, _r in owners[:-1])
+                    if blob != datas[-1]:
+                        written.append((rel, blob))
+                    continue
                 try:
                     original, align, mult, _path = _original(rom, key, dic)
                     loaded = []
@@ -473,14 +606,14 @@ def _cached_original(rom, key, dic):
 
 
 def _owners_of(mods):
-    """{lowercase path: [mod, ...]} for .pack.zs carried by two or more mods that are on, in list order."""
+    """{lowercase path: [mod, ...]} for .pack.zs (and BYML game files) carried by two or more mods that are on."""
     found = {}
     for m in mods:
         if not (m.on and m.loads):
             continue
         paths = getattr(m, 'paths', None) or {f: f for f in m.files}
         for low, rel in paths.items():
-            if low.endswith('.pack.zs'):
+            if _mergeable(low):
                 found.setdefault(low, []).append((m, rel))
     shared = {}
     for key, pairs in found.items():
@@ -511,6 +644,17 @@ def ui_clashes(mods_dir, mods, rom=None):
     groups, merged = {}, set()
     mods_dir = Path(mods_dir)
     for key, owners in shared.items():
+        if not key.endswith('.pack.zs'):
+            try:
+                got = _merge_loose(rom, key, [(mods_dir / m.folder / 'romfs' / rel).read_bytes() for m, rel in owners])
+            except (OSError, ValueError, KeyError, zstd.ZstdError):
+                got = None
+            if got is not None:
+                merged.add(key)                   # (merged by Save: not a whole file lost)
+                if got[1]:
+                    a, b = owners[-2][0], owners[-1][0]
+                    groups.setdefault((a.name, b.name, Path(owners[-1][1]).name), []).append('some values')
+            continue
         try:
             original = _cached_original(rom, key, dic)
             loaded = [(m, _cached_pack(mods_dir / m.folder / 'romfs' / rel, dic)) for m, rel in owners]

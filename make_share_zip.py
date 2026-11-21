@@ -36,7 +36,7 @@ rem Opens Link's Tool Box (mod loader and save editor) with the Python in this f
 start "" "%~dp0python\\pythonw.exe" "%~dp0app\\toolbox.pyw"
 '''
 
-README = '''Link''s Tool Box - mod loader and save editor for Zelda: Ocarina of Time on Triforce
+README = '''Link''s Tool Box - mod loader and save editor for Zelda: Ocarina of Time on Longshot
 ==============================================================================
 Link's Tool Box, by Cum_Dumpster
 
@@ -44,13 +44,13 @@ Start:   unzip this folder anywhere (Desktop, Documents...), then double-click "
          Nothing to install: the Python it needs is in the python folder.
 
 The game folder
-    The toolbox finds the game where Triforce put it (it reads Triforce's own setup log). If it cannot,
-    it asks once: pick the folder that has Triforce.exe and the romfs folder in it. To change it later:
+    The toolbox finds the game where Longshot's launcher built it (Games\\Longshot). If it cannot,
+    it asks once: pick the folder that has longshot.exe and the romfs folder in it. To change it later:
     the Folders tab.
 
 Tabs
     Mods         switch the mods in the game's mods folder on and off, set which wins, Save and play.
-                 Triforce only loads mods from the "mods" folder next to Triforce.exe.
+                 Longshot loads mods from the "mods" folder next to longshot.exe (Triforce works too).
     Save editor  pick a slot. Stats (hearts, magic, rupees, bags, ammo, bottles, keys), Inventory (give or take
                  away items), Progress (story flags), All entries (every value). Click a column heading to sort.
     Folders      another game, mods or saves folder.

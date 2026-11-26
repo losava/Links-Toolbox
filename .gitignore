@@ -18,6 +18,7 @@
 !oot_catalog.py
 !size_table.py
 !pack_merge.py
+!byml_rw.py
 !test_pack_merge.py
 !theme.py
 !jpeg_win.py

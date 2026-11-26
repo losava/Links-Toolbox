@@ -884,12 +884,18 @@ class Romfs:
             self.sha = index.get('romfs_sha256', '')
             self.bin = open(folder / 'romfs.bin', 'rb')
         elif folder.is_dir():
+            # (scandir: each file's size comes with the listing on Windows; os.walk + stat asked once per file, ~30 s
+            #  for the game's 187,000 files at every start)
             self.files = []
-            for root, _dirs, names in os.walk(folder):
-                for n in names:
-                    p = Path(root) / n
-                    rel = p.relative_to(folder).as_posix()
-                    self.files.append({'path': rel, 'size': p.stat().st_size, 'offset': None})
+            stack = [(str(folder), '')]
+            while stack:
+                here, rel = stack.pop()
+                with os.scandir(here) as it:
+                    for e in it:
+                        if e.is_dir():
+                            stack.append((e.path, rel + e.name + '/'))
+                        else:
+                            self.files.append({'path': rel + e.name, 'size': e.stat().st_size, 'offset': None})
             self.files.sort(key=lambda f: f['path'])
             self.sha = 'loose:' + (romfs_marker(game) or str(len(self.files)))
         else:

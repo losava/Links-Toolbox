@@ -97,7 +97,9 @@ ELSEWHERE_WHY = ("Its exefs part is code patches (.ips / .pchtxt). This build is
 
 
 PATCH_WHY = ('Its exefs part is code patches (.ips / .pchtxt). This Longshot build applies them when the game is built: '
-             'after Save, press Build game (below) to apply a new or changed patch.')
+             'after Save, press Build game (below) to apply a new or changed patch.' +
+             (' (On the new Longshot Launcher\'s builds, Save also puts the patch files in your profile\'s mods folder, '
+              'where Longshot\'s builder reads them.)'))
 
 
 def has_exefs(folder):
@@ -279,7 +281,51 @@ def apply(mods):
         pack_merge.refresh(MODS, [m.folder for m in on], log=lambda _s: None)
     finally:          # (the order list even when merging failed: the renamed folders must not load out of order)
         write_mods_list([m.folder for m in on])
+        sync_profile_patches([m.folder for m in on if m.patches])
     return [(m.name, new) for m, _t, new in temp]
+
+
+PROFILE_MARK = "Link's Tool Box"     # (mod.json's made_by: the profile mods the toolbox made, and may replace)
+
+
+def sync_profile_patches(folders, game=None):
+    """A new-launcher build builds in only the code patches of its profile's manifest mods (<profile>\\mods\\<name>
+    with mod.json), so each mod that is on and has patch files gets one there under its own folder name (the name
+    exefs_patches.txt and mods.json use): mod.json and a copy of its exefs patch files. Longshot's builder then builds
+    them in at the next build (Build game, or a start: it builds again by itself when they changed). The ones the
+    toolbox made earlier for mods now off or gone are taken out; mods the player put there are left alone."""
+    import json
+    game = Path(game or GAME)
+    profile = nxsave.longshot_profile(game)
+    if not profile or not nxsave.profile_patches(game):
+        return
+    root = profile / 'mods'
+    want = set(folders)
+    for d in list(root.iterdir()) if root.is_dir() else []:
+        try:
+            mine = json.loads((d / 'mod.json').read_text(encoding='utf-8')).get('made_by') == PROFILE_MARK
+        except (OSError, ValueError, AttributeError):
+            mine = False
+        if mine and d.name not in want:
+            shutil.rmtree(d)
+    for folder in folders:
+        src, dest = MODS / folder / 'exefs', root / folder
+        if (dest / 'mod.json').is_file():
+            try:
+                if json.loads((dest / 'mod.json').read_text(encoding='utf-8')).get('made_by') != PROFILE_MARK:
+                    continue        # (the player's own mod of that name: not touched)
+            except (OSError, ValueError, AttributeError):
+                continue
+        if (dest / 'exefs').is_dir():
+            shutil.rmtree(dest / 'exefs')
+        (dest / 'exefs').mkdir(parents=True, exist_ok=True)
+        for f in sorted(src.iterdir()) if src.is_dir() else []:
+            if f.is_file() and f.suffix.lower() in ('.ips', '.pchtxt'):
+                shutil.copy2(f, dest / 'exefs' / f.name)
+        (dest / 'mod.json').write_text(json.dumps({
+            'name': plain(folder), 'made_by': PROFILE_MARK, 'from': str(MODS / folder),
+            'note': 'The code patches of this mod, put here by Link\'s Tool Box so Longshot builds them in. Switch the '
+                    'mod on or off in the toolbox: it updates this folder.'}, indent=2) + '\n', encoding='utf-8')
 
 
 def mods_lists(game=None):
@@ -315,6 +361,18 @@ def write_mods_list(on_folders, game=None):
             lines.append(json.dumps(rest, indent=2)[1:-1].strip('\n'))
         lines.append('}')
         path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+
+def play_command(exe, older=None):
+    """How Save and play starts the game. A new-launcher build: its version's builder plays the launcher's profile
+    (`Longshot.exe play --profile <profile>`: it builds again first when the mods' patches changed, then starts the
+    game with that profile's saves and settings). Started directly, the game would hand over to the builder with
+    the builder's own default profile (versions\\<v>\\profile) instead. Other builds: the game's program."""
+    game = Path(older) if older else GAME
+    version, profile = nxsave.launcher_version_of(game), nxsave.longshot_profile(game)
+    if version and profile and (version / 'Longshot.exe').is_file():
+        return [str(version / 'Longshot.exe'), 'play', '--profile', str(profile), '--output', 'user']
+    return [str(exe)]
 
 
 # the mods that come with the shared toolbox: Link Toolbox\mods, next to its app folder
@@ -1221,7 +1279,7 @@ class App(ttk.Frame):
                 messagebox.showinfo('Mod loader', f'Saved. {already} is running already, so it was not started again: '
                                     'restart it to use the changed mods.', parent=self)
                 return
-            subprocess.Popen([str(exe)], cwd=str(exe.parent))
+            subprocess.Popen(play_command(exe, older), cwd=str(exe.parent))
             self.after_play()
 
     def toggle_ignore_running(self):

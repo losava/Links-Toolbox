@@ -597,15 +597,26 @@ def applies_patches(game=None):
     game = Path(game or game_dir())
     if app_of(game) != 'Longshot':
         return False
-    # shortcut: a new-launcher build builds in only the patches of the profile's manifest mods (mod.json, made by
-    # `Longshot.exe mod import`), and this builder has no import yet; the mods folder's patches are not built in.
     if launcher_version_of(game):
-        return False
+        return profile_patches(game)
     v = longshot_version(game)
     m = re.match(r'nightly-(\d+)', v)
     if m:
         return int(m.group(1)) >= 591
     return bool(re.match(r'v?\d', v)) and version_key(v, game) > version_key('v3.0.0')
+
+
+def profile_patches(game=None):
+    """A new-launcher build builds in the code patches of its profile's manifest mods (a folder with mod.json in
+    <profile>\\mods: the toolbox puts the mods' patch files there on Save): Longshot from nightly-835 (its pull request
+    #2607) and its releases after v3.2.0. Older new-launcher builders built none in."""
+    version = launcher_version_of(game or game_dir())
+    if version is None:
+        return False
+    m = re.match(r'nightly-(\d+)', version.name)
+    if m:
+        return int(m.group(1)) >= 835
+    return bool(re.match(r'v?\d', version.name)) and version_key(version.name) > version_key('v3.2.0')
 
 
 def builds_of(app):

@@ -13,6 +13,7 @@ The names of the entries are not in the save (only murmur3 hashes of them). They
 game files (game/romfs) the first time and kept in names-cache.json next to this file.
 """
 import json
+import ntpath
 import os
 import re
 import struct
@@ -972,6 +973,7 @@ class Romfs:
     files themselves under romfs/ (NX2navi 0.12 and its Triforce installer)."""
 
     def __init__(self, game):
+        game = game_files_of(game)
         self.folder = folder = Path(game) / 'romfs'
         self.bin = None
         if (folder / 'index.json').is_file():
@@ -995,7 +997,11 @@ class Romfs:
             self.files.sort(key=lambda f: f['path'])
             self.sha = 'loose:' + (romfs_marker(game) or str(len(self.files)))
         else:
-            raise FileNotFoundError(f'no game files in {folder}')
+            raise FileNotFoundError(
+                f'no game files in {folder}. This build reads the game straight from your .nup file, which Link\'s '
+                'Tool Box can\'t read yet, and no other build of the same game has its files unpacked (a romfs '
+                'folder). Keep an older Longshot build of it (one built before the new launcher), and the toolbox '
+                'uses that one\'s game files.')
         self.by_path = {f['path']: f for f in self.files}
 
     def load(self, f):
@@ -1339,6 +1345,34 @@ def load_names(game=None, progress=lambda text: None, rebuild=False):
     except OSError:
         pass
     return Names(raw)
+
+
+def _has_game_files(game):
+    folder = Path(game) / 'romfs'
+    return (folder / 'index.json').is_file() or folder.is_dir()
+
+
+def _nup_name(game):
+    """The .nup a build reads its game files from in place (the new builder's longshot_build.json names it), ''."""
+    try:
+        nup = json.loads((Path(game) / 'longshot_build.json').read_text(encoding='utf-8-sig')).get('nup') or ''
+    except (OSError, ValueError, AttributeError):
+        nup = ''
+    return ntpath.basename(nup) if nup else ''
+
+
+def game_files_of(game):
+    """The folder whose romfs holds a game's files: the game folder itself, or, for a build that reads them straight
+    from the .nup (the new Longshot builder: no romfs folder, only longshot_romfs.idx), another build found that was
+    unpacked from the same .nup (its .longshot_romfs note names it), else any build with game files. The game itself
+    when none has them (Romfs then says so)."""
+    game = Path(game)
+    if _has_game_files(game):
+        return game
+    nup = _nup_name(game).lower()
+    others = [d for _a, d in all_game_dirs() if _has_game_files(d)]
+    same = [d for d in others if nup and nup in romfs_marker(d).lower()]
+    return (same or others or [game])[0]
 
 
 def romfs_marker(game):

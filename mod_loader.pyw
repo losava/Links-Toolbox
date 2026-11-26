@@ -267,8 +267,10 @@ def apply(mods):
         m.folder = new
     # packs two mods share are merged, then one size table for the mods that are on (it counts the merged packs)
     import pack_merge
-    pack_merge.refresh(MODS, [m.folder for m in on], log=lambda _s: None)
-    write_mods_list([m.folder for m in on])
+    try:
+        pack_merge.refresh(MODS, [m.folder for m in on], log=lambda _s: None)
+    finally:          # (the order list even when merging failed: the renamed folders must not load out of order)
+        write_mods_list([m.folder for m in on])
     return [(m.name, new) for m, _t, new in temp]
 
 
@@ -1164,7 +1166,7 @@ class App(ttk.Frame):
             done = busy.run(self, 'Saving the mods, merging packs and building the size table from the game files...',
                             lambda: apply(mods))
         except (OSError, ValueError) as err:
-            messagebox.showerror('Mod loader', f'The folders could not be renamed:\n{err}', parent=self)
+            messagebox.showerror('Mod loader', f'Saving did not finish:\n{err}', parent=self)
             self.dirty = False
             self.reload()
             return False

@@ -32,12 +32,30 @@ GAME_EXE = nxsave.game_exe(GAME) or GAME / 'Triforce.exe'
 PATCHES = nxsave.applies_patches(GAME)       # (Longshot nightly-591 and later builds mods' .ips / .pchtxt in)
 
 
+def patch_build(game=None, mods=None):
+    """A new-launcher build can't build code patches in yet (its builder needs Longshot's mod import first): the newest
+    older-style Longshot build that does, and reads the same mods folder (the shared one), else None."""
+    game = Path(game or GAME)
+    if not nxsave.launcher_version_of(game) or nxsave.applies_patches(game):
+        return None
+    here = os.path.normcase(os.path.realpath(mods or MODS))
+    for _v, d in nxsave.longshot_builds():
+        if nxsave.applies_patches(d) and nxsave.program(d, 'longshot.exe') and \
+                os.path.normcase(os.path.realpath(nxsave.mods_dir_for(d, 'Longshot'))) == here:
+            return Path(d)
+    return None
+
+
+PATCH_BUILD = None
+
+
 def set_mods_dir(path=None):
     """Use another mods folder (the toolbox's Folders tab); None: game/mods. Save and play starts the game program
     (Triforce.exe, or Longshot's longshot.exe) next to that folder when there is one there, else the game's."""
-    global MODS, GAME_EXE
+    global MODS, GAME_EXE, PATCH_BUILD
     MODS = Path(path) if path else DEFAULT_MODS
     GAME_EXE = nxsave.game_exe(MODS.parent) or nxsave.game_exe(GAME) or GAME / 'Triforce.exe'
+    PATCH_BUILD = patch_build()
 
 
 set_mods_dir(nxsave.load_settings().get('mods_dir'))
@@ -66,6 +84,11 @@ def plain(folder):
 EXEFS_WHY = ('An exefs part is code for the Switch: .ips / .pchtxt patches, or a plugin (subsdk1-9, like exlaunch '
              'mods). Longshot, Triforce and NX2navi turned the game\'s code into a PC program ahead of time, so they '
              'never run it: only a mod\'s romfs part (its game files) loads.')
+
+
+ELSEWHERE_WHY = ("Its exefs part is code patches (.ips / .pchtxt). This build is the new Longshot Launcher's: its "
+                 "builder can't build code patches in yet (it needs Longshot's mod import, which isn't out yet). Your "
+                 "older build {build} does, so the mod stays on, and Save and play offers to start {build} instead.")
 
 
 PATCH_WHY = ('Its exefs part is code patches (.ips / .pchtxt). This Longshot build applies them when the game is built: '
@@ -126,7 +149,7 @@ def build_reasons(mods, game=None):
     on = [m for m in mods if m.on and m.loads]
     wanted, moved = set(), set()
     for m in on:
-        if not m.patches:
+        if not (m.patches or m.elsewhere):     # (elsewhere: an older build, asked from Save and play)
             continue
         name = m.target(on.index(m) + 1)
         d = MODS / m.folder / 'exefs'
@@ -191,7 +214,9 @@ class Mod:
                     self.paths[low] = rel
         self.exefs = has_exefs(MODS / folder)     # (code for the Switch: the PC ports never run it)
         self.patches = self.exefs and patches_used(MODS / folder)   # (code patches this Longshot build applies)
-        self.loads = romfs.is_dir() or self.patches   # Triforce loads RomFS mods only
+        # (code patches an older build reading the same mods folder builds in: kept on, not switched off by Save)
+        self.elsewhere = self.exefs and not self.patches and PATCH_BUILD is not None and patch_only(MODS / folder)
+        self.loads = romfs.is_dir() or self.patches or self.elsewhere   # Triforce loads RomFS mods only
 
     def target(self, place):
         return f'{place:02d}-{self.name}' if self.on and self.loads else f'_{self.name}'
@@ -771,6 +796,9 @@ class App(ttk.Frame):
             if m.patches:
                 state = ('code patch: build the game again to apply changes' + (f'; {state}' if state else '')
                          if m.on else state)
+            elif m.elsewhere:
+                state = (f'code patch: not built into this build; {PATCH_BUILD.name} has it' +
+                         (f'; {state}' if state else '') if m.on else state)
             elif m.loads and m.exefs:
                 state = 'its exefs part (Switch code) is skipped' + (f'; {state}' if state else '')
             self.tree.insert('', 'end', iid=str(i), tags=(tag,) if tag else (),
@@ -830,7 +858,9 @@ class App(ttk.Frame):
             return
         m = self.mods[i]
         self.note['text'] = '\n'.join(t for t in (NOTES.get(m.name, ''), self.pack_notes.get(m.name, ''),
-                                                  PATCH_WHY if m.patches else EXEFS_WHY if m.exefs else '') if t)
+                                                  PATCH_WHY if m.patches else
+                                                  ELSEWHERE_WHY.format(build=PATCH_BUILD.name) if m.elsewhere else
+                                                  EXEFS_WHY if m.exefs else '') if t)
 
     def click(self, event):
         if self.tree.identify_region(event.x, event.y) == 'cell' and self.tree.identify_column(event.x) == '#1':
@@ -1148,13 +1178,36 @@ class App(ttk.Frame):
         if not GAME_EXE.is_file():
             messagebox.showerror('Mod loader', f'{GAME_EXE} is not there.', parent=self)
             return
+        exe, older = GAME_EXE, None
+        names = [m.name for m in self.mods if m.on and m.elsewhere]
+        if names:        # (code patches this new-launcher build can't build in: offer the older build that does)
+            one = len(names) == 1
+            answer = messagebox.askyesnocancel('Save and play', (
+                f'{", ".join(names)} {"is a code patch" if one else "are code patches"}. This build '
+                f"({nxsave.build_version(GAME) or GAME.name}, the new Longshot Launcher's) can't build code patches "
+                f'in yet, so {"it" if one else "they"} would not work in it.\n\n'
+                f'Play {PATCH_BUILD.name} instead? It builds them in and uses the same mods.\n\n'
+                f"Yes: play {PATCH_BUILD.name}\nNo: play this build without them\nCancel: don't play"), parent=self)
+            if answer is None:
+                return
+            if answer:
+                older = PATCH_BUILD
+                exe = nxsave.program(older, 'longshot.exe')
         if self.save():
+            if older:
+                write_mods_list([m.folder for m in self.mods if m.on and m.loads], older)
+                need = build_reasons(self.mods, older)
+                if need:
+                    messagebox.showinfo('Save and play', f'Saved. {older.name} must be built again first:\n\n' +
+                                        '\n'.join(need) + f'\n\nIn the Folders tab, pick {older.name} under Games '
+                                        'found, open the toolbox again, then press Build game.', parent=self)
+                    return
             already = nxsave.game_running()
             if already:          # ("Save while the game runs" is on: saved, but no second copy of the game)
                 messagebox.showinfo('Mod loader', f'Saved. {already} is running already, so it was not started again: '
                                     'restart it to use the changed mods.', parent=self)
                 return
-            subprocess.Popen([str(GAME_EXE)], cwd=str(GAME_EXE.parent))
+            subprocess.Popen([str(exe)], cwd=str(exe.parent))
             self.after_play()
 
     def toggle_ignore_running(self):

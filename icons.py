@@ -379,15 +379,18 @@ def swap_old_shortcuts():
                     pass
 
 
-def make_shortcut(path):
-    """A shortcut that starts the toolbox, with its icon (Windows: a .lnk; Linux: a .desktop launcher). True when made."""
+def make_shortcut(path, extra='', name="Link's Tool Box",
+                  description="Link's Tool Box - mod loader and save editor"):
+    """A shortcut that starts the toolbox, with its icon (Windows: a .lnk; Linux: a .desktop launcher). extra: more
+    arguments for the toolbox ('--play': only start the game). True when made."""
     ensure()
     program, args, folder = launcher()
+    args = f'{args} {extra}'.strip()
     if not WINDOWS:
         try:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-            Path(path).write_text('[Desktop Entry]\nType=Application\nName=Link\'s Tool Box\n'
-                                  "Comment=Link's Tool Box - mod loader and save editor\n"
+            Path(path).write_text(f'[Desktop Entry]\nType=Application\nName={name}\n'
+                                  f"Comment={description}\n"
                                   f'Exec="{program}" {args}\nPath={folder}\nIcon={PNG}\nTerminal=false\n'
                                   'Categories=Game;Utility;\n', encoding='utf-8')
             os.chmod(path, 0o755)
@@ -397,7 +400,7 @@ def make_shortcut(path):
     q = lambda s: str(s).replace("'", "''")
     ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{q(path)}'); $s.TargetPath='{q(program)}'; "
           f"$s.Arguments='{q(args)}'; $s.WorkingDirectory='{q(folder)}'; $s.IconLocation='{q(ICO)},0'; "
-          "$s.Description='Link''s Tool Box - mod loader and save editor'; $s.Save()")
+          f"$s.Description='{q(description)}'; $s.Save()")
     try:
         r = subprocess.run(['powershell', '-NoProfile', '-Command', ps], capture_output=True, text=True, timeout=30,
                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))

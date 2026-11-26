@@ -509,6 +509,8 @@ class Toolbox:
                                                                                                 padx=(14, 0))
         ttk.Button(buttons, text='Shortcut next to Link Toolbox.bat', command=lambda: self.shortcut(0)).pack(
             side='left', padx=(6, 0))
+        ttk.Button(buttons, text='Play shortcut on the Desktop...', command=self.play_shortcut).pack(
+            side='left', padx=(14, 0))
         self.icon_status = ttk.Label(box, text='A .bat file cannot have an icon: start the toolbox from a shortcut '
                                                'to see this one.', foreground=theme.MUTED)
         self.icon_status.grid(row=r + 1, column=1, columnspan=3, sticky='w', pady=(6, 0))
@@ -572,6 +574,21 @@ class Toolbox:
             return
         self.icon_status['text'] = ('Icon saved: on this window now, and on the shortcuts. (Windows may show the old '
                                     'one for a moment.)')
+
+    def play_shortcut(self):
+        """A Desktop shortcut that only starts the game (the toolbox's --play: no window), asked first. It finds the
+        game in use each time, so it keeps working when Longshot updates to a new version folder."""
+        app = nxsave.app_of()
+        app = app if app in dict(nxsave.APPS) else 'the game'
+        if not messagebox.askyesno('Play shortcut', f'Put a "Play {app}" shortcut on your Desktop?\n\nIt starts the '
+                                   f'game straight away, the same way Save and play does ({app} with your mods and '
+                                   'saves), without opening Link\'s Tool Box. It keeps working after Longshot '
+                                   'updates.', parent=self.root):
+            return
+        name = f'Play {app}'
+        lnk = icons.desktop_folder() / (f'{name}.lnk' if os.name == 'nt' else f'{name.lower().replace(" ", "-")}.desktop')
+        ok = icons.make_shortcut(lnk, '--play', name, f'{name} with your mods (Link\'s Tool Box)')
+        self.icon_status['text'] = f'Shortcut made: {lnk}' if ok else f'The shortcut could not be made at {lnk}.'
 
     def shortcut(self, which):
         lnk = icons.shortcuts()[which]
@@ -1082,5 +1099,34 @@ def main():
     root.mainloop()
 
 
+def play_only():
+    """--play (the Play shortcut): starts the game in use the way Save and play does (a new-launcher build: its
+    builder plays the launcher's profile, building again first when the mods' code patches changed), with no
+    toolbox window. Says so in a message box when there is no game, or it is already running."""
+    root = tk.Tk()
+    root.withdraw()
+    theme.apply(root)
+    icons.apply(root)
+    try:
+        if nxsave.find_game_dir() is None:
+            messagebox.showerror(BASE_TITLE, 'No game was found. Open Link\'s Tool Box and pick it in the Folders tab.',
+                                 parent=root)
+            return
+        loader = load('mod_loader')
+        exe = loader.GAME_EXE
+        if not exe.is_file():
+            messagebox.showerror(BASE_TITLE, f'{exe} is not there. Open Link\'s Tool Box to check the game.', parent=root)
+            return
+        running = nxsave.game_running()
+        if running and running.lower() != 'longshotlauncher.exe':
+            messagebox.showinfo(BASE_TITLE, f'{running} is running already.', parent=root)
+            return
+        cmd = loader.play_command(exe)
+        import subprocess
+        subprocess.Popen(cmd, cwd=str(Path(cmd[0]).parent))
+    finally:
+        root.destroy()
+
+
 if __name__ == '__main__':
-    main()
+    play_only() if '--play' in sys.argv else main()

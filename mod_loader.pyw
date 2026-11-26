@@ -249,9 +249,12 @@ def apply(mods):
 
 def mods_lists(game=None):
     """The mods.json files a Longshot build reads its mods' order and switches from (its Insert menu's Mods tab: in
-    the game folder, or beside the player's settings in the user folder); [] when it has none."""
+    the game folder, or beside the player's settings in the user folder; a new-launcher build: its profile's, made
+    when missing); [] when it has none."""
     game = Path(game or GAME)
-    return [p for p in (game / 'mods.json', game / 'user' / 'mods.json') if p.is_file()]
+    found = [p for p in (game / 'mods.json', game / 'user' / 'mods.json') if p.is_file()]
+    profile = nxsave.longshot_profile(game)      # (the new launcher's build: beside the profile's settings.ini)
+    return found + [profile / 'mods.json'] if profile else found
 
 
 def write_mods_list(on_folders, game=None):
@@ -262,11 +265,12 @@ def write_mods_list(on_folders, game=None):
     names = list(on_folders) + [f for f in ('~Merged Packs', '~Size Table') if (MODS / f).is_dir()]
     for path in mods_lists(game):
         try:
-            doc = json.loads(path.read_text(encoding='utf-8-sig'))
+            doc = json.loads(path.read_text(encoding='utf-8-sig')) if path.is_file() else {}
             if not isinstance(doc, dict):
                 continue
         except (OSError, ValueError):
             continue
+        path.parent.mkdir(parents=True, exist_ok=True)    # (a profile's list is made when it has none)
         doc['mods'] = [{'id': f'local/{n}', 'enabled': True} for n in names]
         lines = ['{', '  "mods": [']
         lines += [f'    {json.dumps(e)}' + (',' if i < len(names) - 1 else '') for i, e in enumerate(doc['mods'])]

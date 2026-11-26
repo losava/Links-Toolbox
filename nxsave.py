@@ -313,7 +313,10 @@ HOME = Path.home()
 
 
 def program(game, exe):
-    """A game program in a folder: 'longshot.exe' on Windows; on Linux also 'longshot' (no .exe, a native build)."""
+    """A game program in a folder: 'longshot.exe' on Windows; on Linux also 'longshot' (no .exe, a native build).
+    The new launcher's version folder (versions\\<v>\\Longshot.exe, its builder) is not a game."""
+    if exe.lower() == 'longshot.exe' and is_launcher_version(game):
+        return None
     for name in (exe,) if WINDOWS else (exe[:-4] if exe.endswith('.exe') else exe, exe):
         p = Path(game) / name
         if p.is_file():
@@ -440,6 +443,82 @@ def resolve_game_dir(d):
     return found[0] if found else None
 
 
+# --------------------------------------------------------------------------- the new Longshot launcher (Nov 2026)
+# It keeps each Longshot version in LongshotLauncher\versions\<v> (its builder, Longshot.exe) and builds the game into
+# versions\<v>\builds\<name>. The player's saves, settings and mods.json live in a profile folder
+# (LongshotLauncher\profiles\<name>: profile.json, settings.ini, saves\save\<uid>), which it hands to the game.
+
+def launcher_home():
+    """The new Longshot launcher's own folder: %LOCALAPPDATA%\\LongshotLauncher (on Linux ~/.local/share)."""
+    local = os.environ.get('LOCALAPPDATA', '')
+    if WINDOWS and local:
+        return Path(local) / 'LongshotLauncher'
+    return HOME / '.local' / 'share' / 'LongshotLauncher'
+
+
+def is_launcher_version(d):
+    """A version folder of the new launcher: its Longshot.exe is the builder, the game is in builds\\<name>."""
+    d = Path(d)
+    return (d / 'longshot_release.json').is_file() and (d / 'builds').is_dir()
+
+
+def launcher_version_of(game):
+    """The version folder a game was built in by the new launcher (versions\\<v>), None for an old-style build."""
+    game = Path(game)
+    if game.parent.name.lower() == 'builds' and is_launcher_version(game.parent.parent):
+        return game.parent.parent
+    return None
+
+
+def profile_builds():
+    """The games the new launcher built (versions\\<v>\\builds\\<name> with longshot.exe), the newest version first."""
+    out = []
+    try:
+        versions = [v for v in (launcher_home() / 'versions').iterdir() if is_launcher_version(v)]
+    except OSError:
+        return out
+    for v in sorted(versions, key=lambda v: version_key(v.name, v), reverse=True):
+        try:
+            out += sorted(b for b in (v / 'builds').iterdir() if b.is_dir() and program(b, 'longshot.exe'))
+        except OSError:
+            pass
+    return out
+
+
+def _profile_json(folder):
+    try:
+        d = json.loads((Path(folder) / 'profile.json').read_text(encoding='utf-8-sig'))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def longshot_profile(game=None):
+    """The profile folder a new-launcher build plays (its saves, settings.ini and mods.json): the profile that names
+    the build's version, else the launcher's current one, else 'default', else the builder's own (versions\\<v>\\profile).
+    None for an old-style build (it keeps those in its own folder)."""
+    version = launcher_version_of(game or game_dir())
+    if version is None:
+        return None
+    profiles = launcher_home() / 'profiles'
+    try:
+        found = sorted(p for p in profiles.iterdir() if (p / 'profile.json').is_file())
+    except OSError:
+        found = []
+    for p in found:     # (profile.json's version is the launcher's name for it: v4.0.0 or nightly-836)
+        want = str(_profile_json(p).get('version') or '')
+        if want and (version.name == want or version.name.startswith(want + '-')):
+            return p
+    try:
+        current = json.loads((launcher_home() / 'settings.json').read_text(encoding='utf-8-sig')).get('currentProfile')
+    except (OSError, ValueError, AttributeError):
+        current = None
+    for name in [current, 'default']:
+        if name and (profiles / str(name) / 'profile.json').is_file():
+            return profiles / str(name)
+    return version / 'profile'
+
+
 def _game_dir_candidates():
     picked = load_settings().get('game_dir')                # picked in the toolbox's Folders tab
     yield picked
@@ -466,6 +545,7 @@ def _game_dir_candidates():
     if not WINDOWS:
         homes += [HOME / '.local' / 'share' / 'longshot', HOME / 'Games' / 'longshot']
     # (and now one folder per version inside those: Games\Longshot\rc\v3.0.0)
+    yield from profile_builds()                             # the new launcher's (versions\<v>\builds\<name>)
     for longshot in homes:
         yield longshot
         if longshot.is_dir():
@@ -503,7 +583,8 @@ def build_version(build, app=None):
                     return line.split('=', 1)[1].strip()
         except OSError:
             pass
-    return ''
+    version = launcher_version_of(build) if app in (None, 'Longshot') else None
+    return version.name if version else ''     # (a new-launcher build: its version folder's name, nightly-836-4d1e555f)
 
 
 def longshot_version(build):
@@ -515,6 +596,10 @@ def applies_patches(game=None):
     pull request #134) and its releases after v3.0.0. Plugins (subsdk) are not run by any of them."""
     game = Path(game or game_dir())
     if app_of(game) != 'Longshot':
+        return False
+    # shortcut: a new-launcher build builds in only the patches of the profile's manifest mods (mod.json, made by
+    # `Longshot.exe mod import`), and this builder has no import yet; the mods folder's patches are not built in.
+    if launcher_version_of(game):
         return False
     v = longshot_version(game)
     m = re.match(r'nightly-(\d+)', v)
@@ -779,11 +864,22 @@ def save_bases(game, app):
     """The folders an app keeps its save accounts in, its own first."""
     game = Path(game)
     bases = [game.joinpath(*parts) for parts in SAVE_BASES]
+    profile = longshot_profile(game) if app == 'Longshot' else None
+    if profile:               # the new launcher's build plays a profile: <profile>\saves\save, nothing else
+        return [profile / 'saves' / 'save']
     if app == 'Longshot':     # Longshot started from its launcher keeps the saves in %APPDATA%\Longshot\save
         bases.insert(0, longshot_data() / 'save')
     elif app == 'NX2navi':    # NX2navi's own saves: profile/save (Triforce moved its copies to user/save)
         bases.reverse()
     return bases
+
+
+def default_saves(game=None):
+    """The saves folder the Folders tab shows as its default: the game folder's user\\save, or a new-launcher build's
+    profile saves (<profile>\\saves\\save)."""
+    game = Path(game or game_dir())
+    profile = longshot_profile(game)
+    return profile / 'saves' / 'save' if profile else game / 'user' / 'save'
 
 
 def accounts_in(base):

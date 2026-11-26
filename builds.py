@@ -241,7 +241,11 @@ def save_places():
             add('Triforce' + ('' if is_main(game) else f' ({Path(game).name})'), Path(game) / 'user')
         elif app == 'Longshot':
             longshot = True
-            add(f'Longshot build {Path(game).name}', Path(game) / 'user')
+            profile = nxsave.longshot_profile(game)
+            if profile:     # (the new launcher's build plays a profile: its saves are in <profile>\saves\save)
+                add(f'Longshot profile {profile.name}', profile / 'saves')
+            else:
+                add(f'Longshot build {Path(game).name}', Path(game) / 'user')
     if longshot or longshot_data().exists():
         add('Longshot (its launcher)', longshot_data())
     return out

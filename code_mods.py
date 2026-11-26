@@ -393,6 +393,10 @@ def build_command(game):
     """The command the Longshot Launcher builds a game folder with (its builder from the toolchain of the game's
     version, the player's game file, DLSS / XeSS as chosen in the launcher). CodeModError saying what is missing."""
     game = Path(game)
+    folder = nxsave.launcher_version_of(game)
+    if folder:      # the new launcher's build: its version's Longshot.exe updates the profile's game (builds\default);
+        profile = nxsave.longshot_profile(game)    # the profile keeps the game file and the accepted licences
+        return [str(folder / 'Longshot.exe'), 'update', '--profile', str(profile), '--output', 'recomplauncher']
     version = nxsave.longshot_version(game)
     if not version:
         raise CodeModError(f'{game} has no longshot_version.txt: not a Longshot build.')

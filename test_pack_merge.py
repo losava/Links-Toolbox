@@ -257,8 +257,9 @@ def test_save_merges():
         put('_Off', low, zs_pack(off_members, dic))
         (mods / pack_merge.FOLDER / 'romfs').mkdir(parents=True)
         (mods / pack_merge.FOLDER / 'romfs' / 'stale.txt').write_bytes(b'stale')
-        old_mods, old_rom = mod_loader.MODS, nxsave.Romfs
+        old_mods, old_rom, old_game = mod_loader.MODS, nxsave.Romfs, mod_loader.GAME
         mod_loader.MODS = mods
+        mod_loader.GAME = game     # (apply writes the game's mods.json: never the real one)
         nxsave.Romfs = lambda _game: rom
         try:
             mod_a, mod_b, mod_off = mod_loader.Mod('_A'), mod_loader.Mod('_B'), mod_loader.Mod('_Off')
@@ -278,7 +279,7 @@ def test_save_merges():
             assert plain['A'][0][1] == 2 and kept['A'][0][1] == 1
             mod_loader.apply([mod_a, mod_b, mod_off])
         finally:
-            mod_loader.MODS, nxsave.Romfs = old_mods, old_rom
+            mod_loader.MODS, nxsave.Romfs, mod_loader.GAME = old_mods, old_rom, old_game
         merged_file = mods / pack_merge.FOLDER / 'romfs' / rel
         assert merged_file.is_file() and not (mods / pack_merge.FOLDER / 'romfs' / 'stale.txt').exists()
         assert not list((mods / pack_merge.FOLDER).rglob('Only.pack.zs'))

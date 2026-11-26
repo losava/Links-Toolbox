@@ -157,7 +157,7 @@ class Toolbox:
                  'Used once the toolbox is opened again.'),
                 ('Mods folder', self.mods_var, mod_loader.DEFAULT_MODS,
                  'The folder of mod folders the Mods tab lists and switches on and off.'),
-                ('Saves folder', self.save_var, nxsave.game_dir() / 'user' / 'save',
+                ('Saves folder', self.save_var, nxsave.default_saves(),
                  "A save's own folder (the one with slot_01, slot_02...), or a folder of those: the latest is used."))
         # every game folder found (Triforce, Longshot...): pick one to use it, its mods and its saves
         ttk.Label(tab, text='Games found', font=(theme.FAMILY, 10, 'bold')).grid(row=0, column=0, sticky='w')
@@ -936,7 +936,7 @@ class Toolbox:
         same = lambda a, b: bool(a) and os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
         if same(mods_dir, mod_loader.DEFAULT_MODS):
             mods_dir = ''
-        if same(save_dir, nxsave.game_dir() / 'user' / 'save'):
+        if same(save_dir, nxsave.default_saves()):
             save_dir = ''
         self.mods_var.set(mods_dir)
         self.save_var.set(save_dir)

@@ -92,3 +92,96 @@ def run(parent, text, work, title="Link's Tool Box", delay_ms=250):
     if 'error' in out:
         raise out['error']
     return out.get('result')
+
+
+# ------------------------------------------------------------------------------------------- the start-up window
+# A small green-capped elf running in place (our own pixel art, drawn here: no image files), 12 x 16 pixels.
+ELF_COLOURS = {'G': '#3fa34d', 'g': '#2b7a37', 'H': '#e6c35c', 'S': '#f2c79a', 'E': '#1d1d1d', 'T': '#4cb85c',
+               'B': '#7a4a22', 'L': '#e8dcc0', 'b': '#5a3518'}
+ELF_TOP = ['......GGG...',
+           '....GGGGGG..',
+           '...GGGGGGGg.',
+           '..gGHHHHHGg.',
+           '.gg.HSSSSH..',
+           'g...SSESSE..',
+           '....SSSSSS..',
+           '.....SSSS...',
+           '....TTTTTT..',
+           '...TTTTTTTT.']
+ELF_ARMS = ['..STTTTTTTS.', '...TTTTTTTS.', '..STTTTTTTS.', '..STTTTTTT..']
+ELF_BODY = ['....BBBBBB..', '....TTTTTT..']
+ELF_LEGS = [['...LL...LL..', '..LL.....LL.', '.bb.....bb..'],
+            ['.....LLL....', '.....L.L....', '.....bbb....'],
+            ['....LL..LL..', '...LL....LL.', '..bb.....bb.'],
+            ['.....LLL....', '.....LL.L...', '.....bb.b...']]
+ELF_SCALE = 4
+
+
+def elf_frame(i):
+    """The rows of frame i of the run (four frames; the passing frames bob up a pixel)."""
+    rows = ELF_TOP + [ELF_ARMS[i % 4]] + ELF_BODY + ELF_LEGS[i % 4]
+    return rows[1:] + ['............'] if i % 2 else rows
+
+
+class Splash:
+    """The window shown while the toolbox opens: the running elf, the step it is on and how far it is (percent).
+    step() redraws it; the elf runs whenever the window gets a moment (between steps, and while busy.run works)."""
+
+    def __init__(self, root, title="Link's Tool Box"):
+        self.win = win = tk.Toplevel(root)
+        win.overrideredirect(True)
+        win.configure(background=theme.BORDER)
+        frm = ttk.Frame(win, padding=(16, 14))
+        frm.pack(fill='both', expand=True, padx=1, pady=1)
+        self.canvas = tk.Canvas(frm, width=12 * ELF_SCALE, height=16 * ELF_SCALE, background=theme.BG,
+                                highlightthickness=0)
+        self.canvas.grid(row=0, column=0, rowspan=3, padx=(0, 16))
+        ttk.Label(frm, text=title, foreground=theme.GOLD, font=(theme.FAMILY, 11, 'bold')).grid(row=0, column=1,
+                                                                                              sticky='w')
+        self.text = ttk.Label(frm, text='Starting...', foreground=theme.SOFT)
+        self.text.grid(row=1, column=1, sticky='w', pady=(2, 6))
+        row = ttk.Frame(frm)
+        row.grid(row=2, column=1, sticky='ew')
+        self.bar = ttk.Progressbar(row, mode='determinate', maximum=100, length=260)
+        self.bar.pack(side='left')
+        self.pct = ttk.Label(row, text='0%', width=5, anchor='e')
+        self.pct.pack(side='left', padx=(8, 0))
+        self.frame = 0
+        self.draw()
+        theme.center(win, root)
+        win.lift()
+        win.update()
+        self._tick()
+
+    def draw(self):
+        c = self.canvas
+        c.delete('all')
+        for y, line in enumerate(elf_frame(self.frame)):
+            for x, ch in enumerate(line):
+                if ch in ELF_COLOURS:
+                    c.create_rectangle(x * ELF_SCALE, y * ELF_SCALE, (x + 1) * ELF_SCALE, (y + 1) * ELF_SCALE,
+                                       fill=ELF_COLOURS[ch], width=0)
+
+    def _tick(self):
+        try:
+            if self.win.winfo_exists():
+                self.frame += 1
+                self.draw()
+                self.win.after(120, self._tick)
+        except tk.TclError:
+            pass
+
+    def step(self, pct, text):
+        try:
+            self.bar['value'] = pct
+            self.pct['text'] = f'{pct:.0f}%'
+            self.text['text'] = text
+            self.win.update()
+        except tk.TclError:
+            pass
+
+    def close(self):
+        try:
+            self.win.destroy()
+        except tk.TclError:
+            pass

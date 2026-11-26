@@ -1019,6 +1019,10 @@ def main():
     root.report_callback_exception = report_callback_error
     theme.apply(root)
     icons.apply(root)
+    root.withdraw()                   # (shown once it is ready; meanwhile the start-up window says how far it is)
+    import busy
+    splash = busy.Splash(root)
+    splash.step(5, 'Starting...')
     if '--selftest' not in sys.argv:
         icons.first_run()
         if os.name == 'nt':
@@ -1027,28 +1031,35 @@ def main():
                 install.refresh_version()
             except Exception:
                 pass
+    splash.step(15, 'Finding your game...')
     if nxsave.find_game_dir() is None and '--selftest' not in sys.argv:
-        root.withdraw()
+        splash.close()
         if not ask_game_dir(root):
             root.destroy()
             return
-        root.deiconify()
+        splash = busy.Splash(root)
+    splash.step(30, 'Checking game builds and shared folders...')
     if '--selftest' not in sys.argv:  # new builds use the shared mods and saves; a newer build is offered at the
         try:                          # first start only (then from the Folders tab's Find games)
             import builds
             first = not nxsave.load_settings().get('builds_found')
-            builds.check(root, offer=first)
+            builds.check(splash.win, offer=first)
             if first:
                 nxsave.save_settings({**nxsave.load_settings(), 'builds_found': True})
         except Exception:
             pass
+    splash.step(45, 'Loading the mod loader and save editor...')
     load_tools()
     if '--selftest' not in sys.argv:  # (old copies of the toolbox's own mods an update left behind)
         try:
             mod_loader.tidy_bundled()
         except Exception:
             pass
+    splash.step(60, 'Reading your mods, game files and saves...')
     box = Toolbox(root)
+    splash.step(100, 'Ready')
+    splash.close()
+    root.deiconify()
     if not nxsave.zstd and '--selftest' not in sys.argv:    # (a Linux Python older than 3.14, without zstandard)
         root.after(800, lambda: messagebox.showwarning(
             BASE_TITLE, 'This Python cannot read the game\'s packed files, so Save in the Mods tab and the names in '

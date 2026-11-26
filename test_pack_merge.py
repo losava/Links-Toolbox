@@ -418,7 +418,7 @@ def test_list_hides_loader_folders():
             assert [m.folder for m in mod_loader.scan()] == ['01-A', '_B']
         finally:
             mod_loader.MODS = old
-    assert nxsave.VERSION == '1.6.1'
+    assert nxsave.VERSION == '1.6.2'
     print('ok list')
 
 

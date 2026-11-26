@@ -580,7 +580,47 @@ def test_byml_merge():
     assert pack_merge.merge_byml(b'not byml', [b'x', b'y']) is None
     print('ok BYML files merged key by key')
 
+def test_nup_index():
+    """The new Longshot builder's longshot_romfs.idx: Romfs reads each file from its place in the .nup."""
+    import struct
+    with tempfile.TemporaryDirectory() as tmp:
+        game, nup = Path(tmp) / 'game', Path(tmp) / 'Game.nup'
+        game.mkdir()
+        files = {'A/one.txt': b'first file', 'B/two.bin': b'\x00\x01second'}
+        blob, places = bytearray(b'NUP\x01' + bytes(12)), []
+        for name, data in files.items():
+            places.append((name, len(blob), len(data)))
+            blob += data + b'pad'
+        nup.write_bytes(bytes(blob))
+        path = str(nup).encode('utf-8')
+        names = b''.join(n.encode() for n, _o, _l in places)
+        head = struct.pack('<4sIQQ', b'LSRI', 1, len(places), len(blob)) + b'\x11' * 32
+        head += struct.pack('<II', len(path), len(names)) + path
+        head += bytes((-len(head)) % 8)
+        at = 0
+        for name, offset, length in places:
+            head += struct.pack('<QQQII', offset, length, length, at, len(name))
+            at += len(name)
+        (game / 'longshot_romfs.idx').write_bytes(head + names)
+        rom = nxsave.Romfs(game)
+        try:
+            assert sorted(f['path'] for f in rom.files) == sorted(files)
+            for name, data in files.items():
+                assert rom.load(name) == data
+            assert rom.sha.startswith('nup:11')
+        finally:
+            rom.close()
+        nup.write_bytes(bytes(blob) + b'changed')        # (a .nup that changed or moved: said, not misread)
+        try:
+            nxsave.Romfs(game)
+            raise AssertionError('a changed .nup was read')
+        except FileNotFoundError:
+            pass
+    print('ok game files read from a .nup')
+
+
 def main():
+    test_nup_index()
     test_sarc_writer()
     test_merge_members()
     test_save_merges()

@@ -86,6 +86,11 @@ EXEFS_WHY = ('An exefs part is code for the Switch: .ips / .pchtxt patches, or a
              'never run it: only a mod\'s romfs part (its game files) loads.')
 
 
+WAITING_WHY = ("Its exefs part is code patches (.ips / .pchtxt). This build is the new Longshot Launcher's: its builder "
+               "can't build code patches in yet (it needs Longshot's mod import, which isn't out yet). The mod stays "
+               "on, so it's ready once Longshot can build it in. Its game files (romfs), if it has any, load now.")
+
+
 ELSEWHERE_WHY = ("Its exefs part is code patches (.ips / .pchtxt). This build is the new Longshot Launcher's: its "
                  "builder can't build code patches in yet (it needs Longshot's mod import, which isn't out yet). Your "
                  "older build {build} does, so the mod stays on, and Save and play offers to start {build} instead.")
@@ -216,7 +221,10 @@ class Mod:
         self.patches = self.exefs and patches_used(MODS / folder)   # (code patches this Longshot build applies)
         # (code patches an older build reading the same mods folder builds in: kept on, not switched off by Save)
         self.elsewhere = self.exefs and not self.patches and PATCH_BUILD is not None and patch_only(MODS / folder)
-        self.loads = romfs.is_dir() or self.patches or self.elsewhere   # Triforce loads RomFS mods only
+        # (a new-launcher build with no older build to play them in: kept on too, waiting for Longshot's mod import)
+        self.waiting = (self.exefs and not self.patches and not self.elsewhere and patch_only(MODS / folder)
+                        and nxsave.launcher_version_of(GAME) is not None)
+        self.loads = romfs.is_dir() or self.patches or self.elsewhere or self.waiting   # Triforce loads RomFS mods only
 
     def target(self, place):
         return f'{place:02d}-{self.name}' if self.on and self.loads else f'_{self.name}'
@@ -798,6 +806,9 @@ class App(ttk.Frame):
             if m.patches:
                 state = ('code patch: build the game again to apply changes' + (f'; {state}' if state else '')
                          if m.on else state)
+            elif m.waiting:
+                state = ('code patch: kept on; this build can\'t build it in yet (waits for Longshot\'s mod import)' +
+                         (f'; {state}' if state else '') if m.on else state)
             elif m.elsewhere:
                 state = (f'code patch: not built into this build; {PATCH_BUILD.name} has it' +
                          (f'; {state}' if state else '') if m.on else state)
@@ -862,6 +873,7 @@ class App(ttk.Frame):
         self.note['text'] = '\n'.join(t for t in (NOTES.get(m.name, ''), self.pack_notes.get(m.name, ''),
                                                   PATCH_WHY if m.patches else
                                                   ELSEWHERE_WHY.format(build=PATCH_BUILD.name) if m.elsewhere else
+                                                  WAITING_WHY if m.waiting else
                                                   EXEFS_WHY if m.exefs else '') if t)
 
     def click(self, event):

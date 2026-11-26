@@ -822,7 +822,7 @@ class App(ttk.Frame):
         if self.dirty and messagebox.askyesno('Build the game', 'Save your mod changes first, so the build uses '
                                               'them?', parent=self) and not self.save():
             return
-        code_mods_ui.build_game(self, GAME, on_done=lambda _ok: self.after_code_change())
+        code_mods_ui.build_game(self, GAME, on_done=lambda _ok: self.after_code_change(), play=self.play)
 
     def code_mods(self):
         import code_mods_ui

@@ -177,9 +177,10 @@ def build_progress(lines):
     return None, ''
 
 
-def build_game(parent, game=None, on_done=lambda ok: None):
+def build_game(parent, game=None, on_done=lambda ok: None, play=None):
     """Builds the game folder again with the launcher's own builder (code patches and code mods go in at a build), in
-    a window that shows how far it is. Asks first; refuses while the game runs."""
+    a window that shows how far it is. Asks first; refuses while the game runs. play: when given, a finished build
+    offers a Play button that calls it (the Mods tab's Save and play)."""
     import nxsave
     import threading
     game = Path(game or nxsave.game_dir())
@@ -217,6 +218,11 @@ def build_game(parent, game=None, on_done=lambda ok: None):
     row.pack(fill='x', pady=(12, 0))
     close = ttk.Button(row, text='Close', command=win.destroy, state='disabled')
     close.pack(side='right')
+
+    def play_now():
+        win.destroy()
+        play()
+    play_btn = ttk.Button(row, text='Play', command=play_now) if play else None
     win.protocol('WM_DELETE_WINDOW', lambda: None if str(close['state']) == 'disabled' else win.destroy())
     theme.center(win, parent)
     log_path = game / 'logs' / 'link-toolbox-build.log'
@@ -263,12 +269,16 @@ def build_game(parent, game=None, on_done=lambda ok: None):
         if ok:
             cm.mark_built(game)
             head['text'] = f'Longshot {version} is built.'
-            line['text'] = 'Your code patches and code mods are in the game. Start it to play.'
+            line['text'] = ('Your code patches and code mods are in the game.' +
+                            (' Press Play to start it.' if play_btn else ' Start it to play.'))
         else:
             head['text'] = f'The build stopped (code {state["code"]}).'
             line['text'] = ((lines[-1][:300] + '\n\n') if lines else '') + f'The whole log: {log_path}'
         close['state'] = 'normal'
         close.focus_set()
+        if ok and play_btn:
+            play_btn.pack(side='right', padx=(0, 8))
+            play_btn.focus_set()
         on_done(ok)
 
     threading.Thread(target=job, daemon=True).start()

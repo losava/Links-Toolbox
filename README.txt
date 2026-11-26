@@ -124,15 +124,16 @@ The "mods" folder in this zip has six mods:
                                like the Deku Shield
   Young Link All Items         young Link can pick the adult's items in the
                                menu (big swords, Mirror Shield, hookshot...)
-  Biggoron One-Handed          the Biggoron Sword swung with one hand
+  Biggoron One-Handed          the Biggoron Sword and the Giant's Knife
+                               swung with one hand
   Young Link Adult Motions     young Link gets the adult's motions for the big
                                swords, hookshot, bow and hammer
   Young Link Two-Handed Swords the Biggoron Sword swung with both hands
   (comes switched off)         (needs Young Link Adult Motions)
 
-Biggoron One-Handed and Young Link Two-Handed Swords change the same file,
-so only one can be on. One-Handed comes on: for two hands, switch it off
-and Two-Handed on in the Mods tab, then press Save.
+Biggoron One-Handed and Young Link Two-Handed Swords both change the
+Biggoron Sword's file, so only one can be on. One-Handed comes on: for two
+hands, switch it off and Two-Handed on in the Mods tab, then press Save.
 
 To install them:
   1. Open the toolbox, go to the Mods tab, click "Add mods..." and answer Yes.

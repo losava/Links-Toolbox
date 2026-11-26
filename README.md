@@ -42,13 +42,13 @@ Each mod can also be downloaded on its own (the **Download** links below): add i
 | Young Link Mirror Shield | Young Link holds the Mirror Shield in his hand | <img src="docs/mod-mirror-shield.png" width="240" alt="Young Link with the Mirror Shield"> | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Young.Link.Mirror.Shield.zip) |
 | Young Link Hylian Shield | Young Link holds the Hylian Shield in his hand, like the Deku Shield | <img src="docs/mod-hylian-shield.png" width="240" alt="Young Link with the Hylian Shield"> | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Young.Link.Hylian.Shield.zip) |
 | Young Link All Items | Young Link can pick the adult's items in the menu (big swords, Mirror Shield, hookshot...) | <img src="docs/mod-all-items.png" width="240" alt="Young Link with the Megaton Hammer"> | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Young.Link.All.Items.zip) |
-| Biggoron One-Handed | The Biggoron Sword swung with one hand | <img src="docs/mod-biggoron-one-handed.png" width="240" alt="Young Link with the Biggoron Sword in one hand"> | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Biggoron.One-Handed.zip) |
+| Biggoron One-Handed | The Biggoron Sword and the Giant's Knife swung with one hand | <img src="docs/mod-biggoron-one-handed.png" width="240" alt="Young Link with the Biggoron Sword in one hand"> | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Biggoron.One-Handed.zip) |
 | Young Link Adult Motions | Young Link gets the adult's motions for the big swords, hookshot, bow and hammer | | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Young.Link.Adult.Motions.zip) |
 | Young Link Two-Handed Swords *(comes switched off)* | The Biggoron Sword swung with both hands, as the adult does. Needs Young Link Adult Motions. | <img src="docs/mod-two-handed-swords.png" width="240" alt="Young Link holding the Biggoron Sword with both hands"> | [Download](https://github.com/losava/Links-Toolbox/releases/latest/download/Mod.Young.Link.Two-Handed.Swords.zip) |
 
 *The pictures show young Link wearing PlayableMalonCostumes, a separate mod by another author that is not included.*
 
-**Biggoron One-Handed** and **Young Link Two-Handed Swords** change the same file, so only one can be on. One-Handed comes switched on. To swing it with two hands, switch One-Handed off and Two-Handed on in the Mods tab, then press **Save**.
+**Biggoron One-Handed** and **Young Link Two-Handed Swords** both change the Biggoron Sword's file, so only one can be on. One-Handed comes switched on. To swing it with two hands, switch One-Handed off and Two-Handed on in the Mods tab, then press **Save**.
 
 They're made for **Ocarina of Time v131072** built with Longshot, and may not work on another version. Pressing Save also builds the size table (`~Size Table`) from your own game, and merges `.pack.zs` files that more than one mod changes (`~Merged Packs`).
 

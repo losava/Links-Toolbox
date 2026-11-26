@@ -208,6 +208,12 @@ It writes `share\Link Toolbox.zip`. Upload that to a GitHub release.
 
 The names of the save's entries aren't stored in this repository. The toolbox reads them from your own game files the first time and keeps them in `names-cache-<number>.json` (one for each game folder, so Triforce and Longshot each have their own).
 
+## Support me
+
+Link's Tool Box is free. If it helped you and you'd like to say thanks, you can tip me on Venmo: **[@Losava](https://venmo.com/u/Losava)**. Completely optional.
+
+<img src="docs/venmo.png" width="200" alt="Venmo QR code for @Losava">
+
 ## Credits
 
 Link's Tool Box by **Cum_Dumpster**, released under the [MIT License](LICENSE).

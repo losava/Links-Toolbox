@@ -83,6 +83,7 @@ def load(name):
     return module
 
 
+SUPPORT_URL = 'https://venmo.com/u/Losava'    # the Updates tab's "Support me" button: the author's Venmo (optional tips)
 mod_loader = save_editor = None     # (loaded by main once the game's folder is known: they read it when loaded)
 
 
@@ -273,6 +274,8 @@ class Toolbox:
         self.update_btn.pack(side='left', padx=(8, 0))
         ttk.Button(bar, text='Release page', command=lambda: __import__('webbrowser').open(
             self.newest.get('page') or f'https://github.com/{updater.REPO}/releases')).pack(side='left', padx=(8, 0))
+        ttk.Button(bar, text='Support me (Venmo)', command=lambda: __import__('webbrowser').open(SUPPORT_URL)).pack(
+            side='left', padx=(8, 0))
         self.auto_check = tk.BooleanVar(value=nxsave.load_settings().get('check_updates', True))
         ttk.Checkbutton(tab, text='Check for updates when the toolbox opens', variable=self.auto_check,
                         command=lambda: nxsave.save_settings({**nxsave.load_settings(),

@@ -177,10 +177,11 @@ def build_progress(lines):
     return None, ''
 
 
-def build_game(parent, game=None, on_done=lambda ok: None, play=None):
+def build_game(parent, game=None, on_done=lambda ok: None, play=None, missing=None):
     """Builds the game folder again with the launcher's own builder (code patches and code mods go in at a build), in
     a window that shows how far it is. Asks first; refuses while the game runs. play: when given, a finished build
-    offers a Play button that calls it (the Mods tab's Save and play)."""
+    offers a Play button that calls it (the Mods tab's Save and play). missing: when given, what a finished build
+    still lacks (the Mods tab's build reasons), said instead of "they are in" when it is not empty."""
     import nxsave
     import threading
     game = Path(game or nxsave.game_dir())
@@ -268,9 +269,17 @@ def build_game(parent, game=None, on_done=lambda ok: None, play=None):
         bar.configure(mode='determinate', maximum=100, value=100 if ok else 0)
         if ok:
             cm.mark_built(game)
+            try:
+                left = missing() if missing else []
+            except Exception:
+                left = []
             head['text'] = f'Longshot {version} is built.'
-            line['text'] = ('Your code patches and code mods are in the game.' +
-                            (' Press Play to start it.' if play_btn else ' Start it to play.'))
+            if left:
+                line['text'] = ('But not everything went in:\n' + '\n'.join(left[:5]) +
+                                f'\n\nThe whole log: {log_path}')
+            else:
+                line['text'] = ('Your code patches and code mods are in the game.' +
+                                (' Press Play to start it.' if play_btn else ' Start it to play.'))
         else:
             head['text'] = f'The build stopped (code {state["code"]}).'
             line['text'] = ((lines[-1][:300] + '\n\n') if lines else '') + f'The whole log: {log_path}'

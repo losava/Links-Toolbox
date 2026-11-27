@@ -822,7 +822,12 @@ class App(ttk.Frame):
         if self.dirty and messagebox.askyesno('Build the game', 'Save your mod changes first, so the build uses '
                                               'them?', parent=self) and not self.save():
             return
-        code_mods_ui.build_game(self, GAME, on_done=lambda _ok: self.after_code_change(), play=self.play)
+        try:        # (the profile's copies of the code patches up to date first: the build takes only those)
+            sync_profile_patches([m.folder for m in self.mods if m.on and m.patches])
+        except OSError:
+            pass
+        code_mods_ui.build_game(self, GAME, on_done=lambda _ok: self.after_code_change(), play=self.play,
+                                missing=lambda: build_reasons(scan()))
 
     def code_mods(self):
         import code_mods_ui

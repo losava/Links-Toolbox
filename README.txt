@@ -55,6 +55,17 @@ The first time, the toolbox looks for your game where Longshot's launcher
 built it (Games\Longshot). If it can't find it, it asks once: pick the folder
 that has longshot.exe and the "romfs" folder in it. You can change it later in the Folders tab.
 
+HOW TO START THE GAME (WITH YOUR MODS):
+  Don't start longshot.exe yourself. On the new Longshot Launcher, the
+  longshot.exe in versions\<version>\builds\default plays a different
+  profile: your saves won't show, and your mods' code patches (like Auto
+  Jump) can be left out. Start the game one of these ways instead:
+    - the "Play Longshot" shortcut on your Desktop (make it in the Look tab:
+      "Play shortcut on the Desktop...")
+    - "Save and play" in the toolbox
+    - the Longshot Launcher's own Play button
+  After "Build game", press Play in the window that says the build is done.
+
 The first time you open the save editor, it reads the item and flag names
 from your game files. That takes a little while, but only once.
 

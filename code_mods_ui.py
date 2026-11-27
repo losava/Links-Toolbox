@@ -280,6 +280,10 @@ def build_game(parent, game=None, on_done=lambda ok: None, play=None, missing=No
             else:
                 line['text'] = ('Your code patches and code mods are in the game.' +
                                 (' Press Play to start it.' if play_btn else ' Start it to play.'))
+            if nxsave.launcher_version_of(game) is not None:
+                line['text'] += ('\n\nDon\'t start longshot.exe yourself: it plays a different profile, without your '
+                                 'saves or code patches. Use Play here, Save and play, the Play Longshot shortcut '
+                                 '(Look tab), or the Longshot Launcher.')
         else:
             head['text'] = f'The build stopped (code {state["code"]}).'
             line['text'] = ((lines[-1][:300] + '\n\n') if lines else '') + f'The whole log: {log_path}'

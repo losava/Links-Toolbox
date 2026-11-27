@@ -31,6 +31,16 @@ Or get **`Link Toolbox.zip`** from the [Releases](../../releases) page, then use
 
 The first time, it also makes a **Link's Tool Box** shortcut with the toolbox's icon next to the `.bat` file (a `.bat` can't have an icon of its own), so you can use that shortcut from then on. There's nothing to install: the zip brings its own Python. You need Windows 10 or 11 and a game built with Longshot. The toolbox finds the game where Longshot's launcher built it (`Games\Longshot`), or asks you once for the folder that has `longshot.exe`.
 
+## How to start the game (with your mods)
+
+**Don't start `longshot.exe` yourself.** On the new Longshot Launcher, the `longshot.exe` in `versions\<version>\builds\default` plays a different profile: your saves won't show, and your mods' code patches (like Auto Jump) can be left out. Start the game one of these ways instead, and you get your mods and your saves:
+
+- the **Play Longshot** shortcut on your Desktop (make it in the **Look** tab: **Play shortcut on the Desktop...**)
+- **Save and play** in the toolbox
+- the Longshot Launcher's own **Play** button
+
+After **Build game**, press **Play** in the window that says the build is done.
+
 ## Mods included
 
 The zip comes with six mods in its `mods` folder. Install them from the **Mods** tab: click **Add mods...**, pick **The mods that came with the toolbox**, then press **Save**.
